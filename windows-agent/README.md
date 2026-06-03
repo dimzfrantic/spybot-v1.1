@@ -120,7 +120,7 @@ Catatan:
 
 Saat agent start, ia akan mencoba kirim notifikasi ke Telegram memakai:
 - `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_CHAT_ID` atau `TELEGRAM_GROUP_ID`
 
 ## 10. Troubleshooting
 
