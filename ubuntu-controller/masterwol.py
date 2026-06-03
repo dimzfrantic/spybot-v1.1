@@ -210,30 +210,27 @@ def get_pc_agent_status_text():
     )
 
 
-def get_explorer_text(target_path=None):
-    payload = call_pc_agent_json("GET", "/explorer", params={"path": target_path} if target_path else None)
-    data = payload.get("data", {})
-    items = data.get("items", [])
-    if not items:
-        item_lines = ["(kosong)"]
-    else:
-        item_lines = []
-        for idx, item in enumerate(items[:20], start=1):
-            icon = "📁" if item.get("type") == "dir" else "📄"
-            size_text = ""
-            if item.get("type") == "file" and item.get("size") is not None:
-                size_text = f" ({item['size']} byte)"
-            item_lines.append(f"{idx}. {icon} `{item.get('name', '-')}`{size_text}")
-        if len(items) > 20:
-            item_lines.append(f"... dan {len(items) - 20} item lainnya")
-
-    current_path = data.get("path", target_path or "drives:/")
+def format_explorer_text(data):
+    current_path = data.get("path", "drives:/")
+    item_count = len(data.get("items", []))
     return (
         "🗂 *EXPLORER PC UTAMA*\n"
         "━━━━━━━━━━━━━━━━━━\n"
         f"📍 *Path:* `{current_path}`\n"
-        + "\n".join(item_lines)
+        f"📦 *Jumlah item:* `{item_count}`\n"
+        "Silakan pilih tombol folder atau file di bawah ini."
     )
+
+
+def format_agent_error(exc, prefix):
+    try:
+        payload = exc.response.json()
+        detail = payload.get("message") or payload.get("error")
+        if detail:
+            return f"⚠️ {prefix}: {detail}"
+    except Exception:
+        pass
+    return f"⚠️ {prefix} (`{type(exc).__name__}`)."
 
 
 def send_pc_screenshot():
@@ -325,17 +322,20 @@ def get_main_menu(pc_online):
 
 def get_explorer_menu(items, current_path):
     rows = []
-    for item in items[:10]:
-        if item.get("type") == "dir":
-            rows.append([{
-                "text": f"📁 {item.get('name', '-')}",
-                "callback_data": build_explorer_callback("dir", item.get('path', '')),
-            }])
-        else:
-            rows.append([{
-                "text": f"📄 {item.get('name', '-')}",
-                "callback_data": build_explorer_callback("file", item.get('path', '')),
-            }])
+    directories = [item for item in items if item.get("type") == "dir"]
+    files = [item for item in items if item.get("type") == "file"]
+
+    for item in directories[:8]:
+        rows.append([{
+            "text": f"📁 {item.get('name', '-')}",
+            "callback_data": build_explorer_callback("dir", item.get('path', '')),
+        }])
+
+    for item in files[:8]:
+        rows.append([{
+            "text": f"📄 {item.get('name', '-')}",
+            "callback_data": build_explorer_callback("file", item.get('path', '')),
+        }])
 
     if current_path and current_path != "drives:/":
         parent_path = get_parent_windows_path(current_path)
@@ -349,7 +349,7 @@ def get_explorer_menu(items, current_path):
 def send_explorer_listing(target_path=None):
     payload = call_pc_agent_json("GET", "/explorer", params={"path": target_path} if target_path else None)
     data = payload.get("data", {})
-    send_msg(get_explorer_text(target_path), get_explorer_menu(data.get("items", []), data.get("path", target_path or "drives:/")))
+    send_msg(format_explorer_text(data), get_explorer_menu(data.get("items", []), data.get("path", target_path or "drives:/")))
 
 
 def handle_command(text):
@@ -461,7 +461,7 @@ def handle_callback(callback_data, message_id=None):
             send_explorer_listing()
         except Exception as exc:
             logger.exception("Failed to open explorer root from agent")
-            send_msg(f"⚠️ Gagal membuka explorer PC utama (`{type(exc).__name__}`).")
+            send_msg(format_agent_error(exc, "Gagal membuka explorer PC utama"))
         return
 
     if callback_data.startswith("explorer|dir|"):
@@ -471,7 +471,7 @@ def handle_callback(callback_data, message_id=None):
             send_explorer_listing(target_path)
         except Exception as exc:
             logger.exception("Failed to browse directory from agent")
-            send_msg(f"⚠️ Gagal membuka folder PC utama (`{type(exc).__name__}`).")
+            send_msg(format_agent_error(exc, "Gagal membuka folder PC utama"))
         return
 
     if callback_data.startswith("explorer|file|"):
@@ -481,7 +481,7 @@ def handle_callback(callback_data, message_id=None):
             send_pc_download(target_path)
         except Exception as exc:
             logger.exception("Failed to download file from agent")
-            send_msg(f"⚠️ Gagal mengunduh file PC utama (`{type(exc).__name__}`).")
+            send_msg(format_agent_error(exc, "Gagal mengunduh file PC utama"))
         return
 
     if callback_data == "menu|nyalakanpc":
