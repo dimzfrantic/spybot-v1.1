@@ -9,7 +9,7 @@ sys.modules.setdefault("wakeonlan", fake_wakeonlan)
 
 SPEC = importlib.util.spec_from_file_location(
     "masterwol_module",
-    "/home/ubnt/masterWOL/masterwol.py",
+    "/home/ubnt/spybot-publish/ubuntu-controller/masterwol.py",
 )
 masterwol = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(masterwol)
@@ -113,3 +113,22 @@ def test_format_agent_error_prefers_response_message():
     message = masterwol.format_agent_error(error, "Gagal membuka folder")
 
     assert "Akses folder ditolak" in message
+
+
+def test_get_explorer_menu_adds_next_page_when_items_exceed_first_page():
+    items = [{"name": f"Folder{i}", "path": f"C:/Folder{i}", "type": "dir"} for i in range(20)]
+
+    menu = masterwol.get_explorer_menu(items, "C:/")
+    labels = [btn["text"] for row in menu["inline_keyboard"] for btn in row]
+
+    assert any("Berikutnya" in label for label in labels)
+
+
+def test_get_explorer_menu_can_render_second_page_items():
+    items = [{"name": f"Folder{i}", "path": f"C:/Folder{i}", "type": "dir"} for i in range(20)]
+
+    menu = masterwol.get_explorer_menu(items, "C:/", page=1)
+    labels = [btn["text"] for row in menu["inline_keyboard"] for btn in row]
+
+    assert any("Folder12" in label for label in labels)
+    assert any("Sebelumnya" in label for label in labels)

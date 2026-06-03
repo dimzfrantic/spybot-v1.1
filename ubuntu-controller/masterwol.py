@@ -44,6 +44,7 @@ LOCK_FILE = None
 TMP_DOWNLOAD_DIR = Path("/tmp/dimzbot-agent-cache")
 TMP_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 EXPLORER_TOKEN_CACHE = {}
+EXPLORER_PAGE_SIZE = 12
 
 logging.basicConfig(
     level=logging.INFO,
@@ -263,12 +264,16 @@ def get_parent_windows_path(target_path):
     return parent.replace("\\", "/")
 
 
-def build_explorer_callback(kind, target_path):
+def build_explorer_callback(kind, target_path, page=None):
     if not target_path:
-        return f"explorer|{kind}|"
-    token = hashlib.sha1(target_path.encode("utf-8")).hexdigest()[:16]
-    EXPLORER_TOKEN_CACHE[token] = target_path
-    return f"explorer|{kind}|{token}"
+        callback = f"explorer|{kind}|"
+    else:
+        token = hashlib.sha1(target_path.encode("utf-8")).hexdigest()[:16]
+        EXPLORER_TOKEN_CACHE[token] = target_path
+        callback = f"explorer|{kind}|{token}"
+    if page is not None:
+        callback = f"{callback}|{page}"
+    return callback
 
 
 def resolve_explorer_path(token_or_path):
@@ -320,36 +325,76 @@ def get_main_menu(pc_online):
     return {"inline_keyboard": buttons}
 
 
-def get_explorer_menu(items, current_path):
+def get_explorer_menu(items, current_path, page=0):
     rows = []
+    safe_page = max(page, 0)
     directories = [item for item in items if item.get("type") == "dir"]
     files = [item for item in items if item.get("type") == "file"]
 
-    for item in directories[:8]:
+    first_page_dir_count = min(10, len(directories))
+    first_page_file_count = min(2, len(files))
+
+    first_page_total = first_page_dir_count + first_page_file_count
+    if first_page_total < EXPLORER_PAGE_SIZE:
+        extra_dirs = min(EXPLORER_PAGE_SIZE - first_page_total, len(directories) - first_page_dir_count)
+        first_page_dir_count += extra_dirs
+        first_page_total = first_page_dir_count + first_page_file_count
+    if first_page_total < EXPLORER_PAGE_SIZE:
+        extra_files = min(EXPLORER_PAGE_SIZE - first_page_total, len(files) - first_page_file_count)
+        first_page_file_count += extra_files
+
+    first_page_items = directories[:first_page_dir_count] + files[:first_page_file_count]
+    remaining_items = directories[first_page_dir_count:] + files[first_page_file_count:]
+
+    if safe_page == 0:
+        page_items = first_page_items
+    else:
+        start = (safe_page - 1) * EXPLORER_PAGE_SIZE
+        end = start + EXPLORER_PAGE_SIZE
+        page_items = remaining_items[start:end]
+
+    for item in page_items:
+        icon = "📁" if item.get("type") == "dir" else "📄"
+        item_kind = "dir" if item.get("type") == "dir" else "file"
         rows.append([{
-            "text": f"📁 {item.get('name', '-')}",
-            "callback_data": build_explorer_callback("dir", item.get('path', '')),
+            "text": f"{icon} {item.get('name', '-')}",
+            "callback_data": build_explorer_callback(item_kind, item.get('path', '')),
         }])
 
-    for item in files[:8]:
-        rows.append([{
-            "text": f"📄 {item.get('name', '-')}",
-            "callback_data": build_explorer_callback("file", item.get('path', '')),
-        }])
+    nav_row = []
+    if safe_page > 0:
+        nav_row.append({
+            "text": "⬅️ Sebelumnya",
+            "callback_data": build_explorer_callback("dir", current_path if current_path != "drives:/" else "", page=safe_page - 1),
+        })
+    if (safe_page == 0 and remaining_items) or (safe_page > 0 and safe_page * EXPLORER_PAGE_SIZE < len(remaining_items)):
+        nav_row.append({
+            "text": "➡️ Berikutnya",
+            "callback_data": build_explorer_callback("dir", current_path if current_path != "drives:/" else "", page=safe_page + 1),
+        })
+    if nav_row:
+        rows.append(nav_row)
 
     if current_path and current_path != "drives:/":
         parent_path = get_parent_windows_path(current_path)
         if parent_path != current_path:
-            rows.append([{"text": "⬆️ Folder Atas", "callback_data": build_explorer_callback("dir", parent_path if parent_path != "drives:/" else "")}])
+            rows.append([{
+                "text": "⬆️ Folder Atas",
+                "callback_data": build_explorer_callback("dir", parent_path if parent_path != "drives:/" else ""),
+            }])
     rows.append([{"text": "🏠 Root Drive", "callback_data": "explorer|dir|"}])
     rows.append([{"text": "🔙 Kembali ke Menu", "callback_data": "menu|open"}])
     return {"inline_keyboard": rows}
 
 
-def send_explorer_listing(target_path=None):
+def send_explorer_listing(target_path=None, page=0):
     payload = call_pc_agent_json("GET", "/explorer", params={"path": target_path} if target_path else None)
     data = payload.get("data", {})
-    send_msg(format_explorer_text(data), get_explorer_menu(data.get("items", []), data.get("path", target_path or "drives:/")))
+    resolved_path = data.get("path", target_path or "drives:/")
+    send_msg(
+        format_explorer_text(data),
+        get_explorer_menu(data.get("items", []), resolved_path, page=page),
+    )
 
 
 def handle_command(text):
@@ -465,17 +510,25 @@ def handle_callback(callback_data, message_id=None):
         return
 
     if callback_data.startswith("explorer|dir|"):
-        target_token = callback_data.split("|", 2)[2] or None
+        _, _, raw_target, *rest = callback_data.split("|")
+        target_token = raw_target or None
         target_path = resolve_explorer_path(target_token)
+        page = 0
+        if rest:
+            try:
+                page = max(int(rest[0]), 0)
+            except ValueError:
+                page = 0
         try:
-            send_explorer_listing(target_path)
+            send_explorer_listing(target_path, page=page)
         except Exception as exc:
             logger.exception("Failed to browse directory from agent")
             send_msg(format_agent_error(exc, "Gagal membuka folder PC utama"))
         return
 
     if callback_data.startswith("explorer|file|"):
-        target_token = callback_data.split("|", 2)[2]
+        _, _, raw_target, *_ = callback_data.split("|")
+        target_token = raw_target
         target_path = resolve_explorer_path(target_token)
         try:
             send_pc_download(target_path)
