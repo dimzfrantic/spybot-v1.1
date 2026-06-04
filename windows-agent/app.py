@@ -10,7 +10,7 @@ from agent_features import (
 )
 from auth import require_agent_token
 from boot_notify import notify_agent_boot
-from config import AGENT_HOST, AGENT_NAME, AGENT_PORT, START_WITH_WINDOWS
+from config import AGENT_HOST, AGENT_NAME, AGENT_PORT, CAMERA_INDEX, START_WITH_WINDOWS
 from logger_setup import setup_logger
 from power_actions import restart_pc, shutdown_pc
 from startup import add_to_startup
@@ -60,6 +60,9 @@ def info():
             "download",
         ],
         "artifact_dir": str(PC_AGENT_ARTIFACT_DIR),
+        "camera_config": {
+            "configured_index": CAMERA_INDEX,
+        },
     })
 
 
@@ -91,7 +94,8 @@ def screenshot():
 @app.get("/camera")
 @require_agent_token
 def camera():
-    result = capture_camera_image()
+    camera_index = request.args.get("index", type=int)
+    result = capture_camera_image(camera_index=camera_index)
     response = send_file(
         result["path"],
         mimetype=result["mimetype"],

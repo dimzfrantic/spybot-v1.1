@@ -60,6 +60,7 @@ Isi parameter penting:
 - `TELEGRAM_BOT_TOKEN=isi-token-bot-telegram`
 - `TELEGRAM_CHAT_ID=-100xxxxxxxxxx`  (boleh group ID)
 - `START_WITH_WINDOWS=true`
+- `CAMERA_INDEX=` kosong untuk auto-scan, atau isi `CAMERA_INDEX=1` jika kamera USB ada di index 1 dan DroidCam ada di index 0
 
 ## 3. Jalankan dari source Python (opsi development)
 
@@ -143,6 +144,8 @@ Saat agent start, ia akan mencoba kirim notifikasi ke Telegram memakai:
 ### Screenshot/camera gagal
 - pastikan desktop session aktif
 - webcam tersedia dan tidak dipakai aplikasi lain
+- jika DroidCam muncul sebagai gambar blank/oranye di index 0, isi `.env` dengan `CAMERA_INDEX=1`, restart agent, lalu uji ulang `/camera`
+- untuk diagnosis cepat tanpa mengubah `.env`, uji langsung dari Ubuntu dengan `/camera?index=1`, `/camera?index=2`, dan seterusnya
 
 ### Agent tidak aktif setelah restart
 - pastikan EXE pernah dijalankan sekali

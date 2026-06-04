@@ -45,6 +45,7 @@ TARGET_MAC = os.getenv("TARGET_MAC", "")
 TARGET_PC_IP = os.getenv("TARGET_PC_IP", "")
 PC_AGENT_BASE_URL = os.getenv("PC_AGENT_BASE_URL", "")
 PC_AGENT_TOKEN = os.getenv("PC_AGENT_TOKEN", "")
+PC_CAMERA_INDEX = os.getenv("PC_CAMERA_INDEX", "").strip()
 
 API_BASE = f"https://api.telegram.org/bot{TOKEN}"
 CONNECT_TIMEOUT = 5
@@ -258,7 +259,10 @@ def send_pc_screenshot():
 
 
 def send_pc_camera():
-    target = download_agent_file("/camera", f"pc-utama-camera-{int(time.time())}.jpg")
+    camera_path = "/camera"
+    if PC_CAMERA_INDEX:
+        camera_path = f"/camera?index={quote(PC_CAMERA_INDEX, safe='')}"
+    target = download_agent_file(camera_path, f"pc-utama-camera-{int(time.time())}.jpg")
     send_photo_file(target, "📷 *Hasil camera PC utama berhasil diambil.*")
 
 

@@ -54,6 +54,7 @@ Lalu isi nilai berikut di file `.env`:
 - `TARGET_PC_IP`
 - `PC_AGENT_BASE_URL`
 - `PC_AGENT_TOKEN`
+- `PC_CAMERA_INDEX` opsional; isi `1` jika klik Camera harus memaksa Windows agent memakai `/camera?index=1`
 
 Contoh:
 
@@ -64,6 +65,7 @@ TARGET_MAC=AA:BB:CC:DD:EE:FF
 TARGET_PC_IP=192.168.1.10
 PC_AGENT_BASE_URL=http://192.168.1.10:8787
 PC_AGENT_TOKEN=ubah-dengan-token-aman-sendiri
+PC_CAMERA_INDEX=1
 ```
 
 ## 4. Uji manual

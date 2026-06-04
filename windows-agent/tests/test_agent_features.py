@@ -17,27 +17,20 @@ class DummyClient:
         return self.info_payload
 
 
-def test_info_lists_extended_capabilities():
-    payload = {
-        "ok": True,
-        "supports": [
-            "health",
-            "info",
-            "status",
-            "restart",
-            "shutdown",
-            "screenshot",
-            "camera",
-            "explorer",
-            "download",
-        ],
-    }
+def test_info_lists_extended_capabilities(monkeypatch):
+    monkeypatch.setattr(app_module, "AGENT_NAME", "test-agent")
+    monkeypatch.setattr(app_module, "CAMERA_INDEX", 1)
 
+    with app_module.app.test_request_context("/info"):
+        response = app_module.info.__wrapped__()
+
+    payload = response.get_json()
     assert payload["ok"] is True
     assert "screenshot" in payload["supports"]
     assert "camera" in payload["supports"]
     assert "explorer" in payload["supports"]
     assert "download" in payload["supports"]
+    assert payload["camera_config"]["configured_index"] == 1
 
 
 def test_screenshot_contract(monkeypatch, tmp_path):
@@ -74,17 +67,18 @@ def test_screenshot_contract(monkeypatch, tmp_path):
 def test_camera_contract(monkeypatch, tmp_path):
     camera_path = tmp_path / "camera.jpg"
     camera_path.write_bytes(b"fake-camera")
+    called = {}
 
-    monkeypatch.setattr(
-        app_module,
-        "capture_camera_image",
-        lambda: {
+    def fake_capture(camera_index=None):
+        called["camera_index"] = camera_index
+        return {
             "ok": True,
             "path": camera_path,
             "filename": "camera.jpg",
             "mimetype": "image/jpeg",
-        },
-    )
+        }
+
+    monkeypatch.setattr(app_module, "capture_camera_image", fake_capture)
     monkeypatch.setattr(
         app_module,
         "send_file",
@@ -92,13 +86,14 @@ def test_camera_contract(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(app_module, "AGENT_NAME", "test-agent")
 
-    with app_module.app.test_request_context("/camera"):
+    with app_module.app.test_request_context("/camera?index=2"):
         response = app_module.camera.__wrapped__()
 
     assert response.status_code == 200
     assert response.data == b"fake-camera"
     assert response.mimetype == "image/jpeg"
     assert response.headers["X-Agent-Host"] == "test-agent"
+    assert called["camera_index"] == 2
 
 
 def test_explorer_contract(monkeypatch):

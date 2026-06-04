@@ -48,6 +48,37 @@ def artifact_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+def test_capture_camera_image_uses_configured_camera_index(monkeypatch, artifact_dir):
+    captures = {
+        0: FakeCapture(True, FakeFrame(0.0)),
+        1: FakeCapture(True, FakeFrame(22.0)),
+    }
+    opened_indices = []
+    saved = {}
+
+    fake_cv2 = types.SimpleNamespace()
+
+    def fake_videocapture(index):
+        opened_indices.append(index)
+        return captures.get(index, FakeCapture(False))
+
+    def fake_imwrite(path, frame):
+        saved["frame"] = frame
+        Path(path).write_bytes(b"camera-image")
+        return True
+
+    fake_cv2.VideoCapture = fake_videocapture
+    fake_cv2.imwrite = fake_imwrite
+    monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+    monkeypatch.setattr(agent_features, "CAMERA_INDEX", 1)
+
+    result = capture_camera_image()
+
+    assert opened_indices == [1]
+    assert saved["frame"] is captures[1]._frame
+    assert result["ok"] is True
+
+
 def test_capture_camera_image_skips_blank_virtual_camera(monkeypatch, artifact_dir):
     captures = {
         0: FakeCapture(True, FakeFrame(0.0)),
@@ -71,6 +102,7 @@ def test_capture_camera_image_skips_blank_virtual_camera(monkeypatch, artifact_d
     fake_cv2.VideoCapture = fake_videocapture
     fake_cv2.imwrite = fake_imwrite
     monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+    monkeypatch.setattr(agent_features, "CAMERA_INDEX", None)
 
     result = capture_camera_image()
 
@@ -104,6 +136,7 @@ def test_capture_camera_image_skips_blank_virtual_camera_when_std_is_numpy_scala
     fake_cv2.VideoCapture = fake_videocapture
     fake_cv2.imwrite = fake_imwrite
     monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+    monkeypatch.setattr(agent_features, "CAMERA_INDEX", None)
 
     result = capture_camera_image()
 
@@ -123,6 +156,7 @@ def test_capture_camera_image_raises_when_only_blank_cameras_exist(monkeypatch, 
         imwrite=lambda path, frame: True,
     )
     monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+    monkeypatch.setattr(agent_features, "CAMERA_INDEX", None)
 
     with pytest.raises(AgentFeatureError) as exc:
         capture_camera_image()

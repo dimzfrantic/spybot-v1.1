@@ -107,6 +107,18 @@ def test_send_explorer_listing_calls_agent_once(monkeypatch):
     assert sent["reply_markup"] is not None
 
 
+def test_send_pc_camera_uses_configured_camera_index(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(masterwol, "PC_CAMERA_INDEX", "1")
+    monkeypatch.setattr(masterwol, "download_agent_file", lambda path, filename=None: calls.append((path, filename)) or "/tmp/camera.jpg")
+    monkeypatch.setattr(masterwol, "send_photo_file", lambda path, caption: None)
+
+    masterwol.send_pc_camera()
+
+    assert calls[0][0] == "/camera?index=1"
+
+
 def test_format_agent_error_prefers_response_message():
     error = FakeHTTPError({"message": "Akses folder ditolak"})
 

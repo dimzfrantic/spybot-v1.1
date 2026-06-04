@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, cast
 
-from config import BASE_DIR
+from config import BASE_DIR, CAMERA_INDEX
 
 ARTIFACT_DIR = BASE_DIR / "artifacts"
 ARTIFACT_DIR.mkdir(exist_ok=True)
@@ -149,7 +149,7 @@ def capture_screenshot() -> dict:
     }
 
 
-def capture_camera_image() -> dict:
+def capture_camera_image(camera_index=None) -> dict:
     try:
         import cv2
     except ImportError as exc:
@@ -161,8 +161,10 @@ def capture_camera_image() -> dict:
 
     selected_frame = None
     found_camera = False
+    selected_index = camera_index if camera_index is not None else CAMERA_INDEX
+    camera_indices = [selected_index] if selected_index is not None else range(CAMERA_SCAN_LIMIT)
 
-    for index in range(CAMERA_SCAN_LIMIT):
+    for index in camera_indices:
         camera = cv2.VideoCapture(index)
         if not camera.isOpened():
             camera.release()

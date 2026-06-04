@@ -29,3 +29,5 @@ RESTART_DELAY_SECONDS = float(os.getenv("RESTART_DELAY_SECONDS", "1.5"))
 SHUTDOWN_DELAY_SECONDS = float(os.getenv("SHUTDOWN_DELAY_SECONDS", "1.5"))
 AGENT_BOOT_NOTIFY_URL = os.getenv("AGENT_BOOT_NOTIFY_URL", "")
 AGENT_BOOT_NOTIFY_TOKEN = os.getenv("AGENT_BOOT_NOTIFY_TOKEN", "")
+_camera_index_value = os.getenv("CAMERA_INDEX", "").strip()
+CAMERA_INDEX = int(_camera_index_value) if _camera_index_value else None
