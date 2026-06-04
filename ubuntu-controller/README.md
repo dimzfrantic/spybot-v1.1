@@ -38,9 +38,15 @@ pip install -U pip
 pip install -r requirements.txt
 ```
 
-## 3. Isi konfigurasi di `masterwol.py`
+## 3. Isi konfigurasi di `.env`
 
-Edit nilai placeholder berikut:
+Salin template:
+
+```bash
+cp .env.example .env
+```
+
+Lalu isi nilai berikut di file `.env`:
 
 - `TOKEN`
 - `GROUP_CHAT_ID`
@@ -51,13 +57,13 @@ Edit nilai placeholder berikut:
 
 Contoh:
 
-```python
-TOKEN = "isi-token-bot-telegram"
-GROUP_CHAT_ID = "-100xxxxxxxxxx"
-TARGET_MAC = "AA:BB:CC:DD:EE:FF"
-TARGET_PC_IP = "192.168.1.10"
-PC_AGENT_BASE_URL = "http://192.168.1.10:8787"
-PC_AGENT_TOKEN = "ubah-dengan-token-aman-sendiri"
+```dotenv
+TOKEN=isi-token-bot-telegram
+GROUP_CHAT_ID=-100xxxxxxxxxx
+TARGET_MAC=AA:BB:CC:DD:EE:FF
+TARGET_PC_IP=192.168.1.10
+PC_AGENT_BASE_URL=http://192.168.1.10:8787
+PC_AGENT_TOKEN=ubah-dengan-token-aman-sendiri
 ```
 
 ## 4. Uji manual
@@ -76,10 +82,27 @@ Salin contoh unit:
 sudo cp dimzbot.service.example /etc/systemd/system/dimzbot.service
 ```
 
-Sesuaikan `ExecStart`, `WorkingDirectory`, dan `User` bila perlu. Jika memakai virtualenv, ubah contoh `ExecStart` menjadi:
+Sesuaikan `ExecStart`, `WorkingDirectory`, dan `User` bila perlu. Untuk pola seperti yang sudah dipakai di PC server Ubuntu ini, gunakan source tunggal repo dan working directory yang sama dengan file `.env`. Jika memakai virtualenv, ubah contoh `ExecStart` menjadi:
 
 ```ini
 ExecStart=/opt/spybot/ubuntu-controller/.venv/bin/python /opt/spybot/ubuntu-controller/masterwol.py
+```
+
+Contoh file service aktif yang setara dengan konfigurasi server Ubuntu saat ini:
+
+```ini
+[Unit]
+Description=DimzBot Master
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/ubnt/spybot-publish/ubuntu-controller/masterwol.py
+Restart=always
+User=ubnt
+WorkingDirectory=/home/ubnt/spybot-publish/ubuntu-controller
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 Lalu aktifkan:

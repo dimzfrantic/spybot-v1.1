@@ -17,16 +17,34 @@ import requests
 from requests import RequestException
 from wakeonlan import send_magic_packet
 
-# ==========================================
-# KONFIGURASI MASTER
-# ==========================================
-TOKEN = "isi-token-bot-telegram"
-GROUP_CHAT_ID = "isi-group-id-telegram"
-TARGET_MAC = "AA:BB:CC:DD:EE:FF"  # MAC PC Utama
-TARGET_PC_IP = "192.168.1.10"   # IP ZeroTier PC Utama
-PC_AGENT_BASE_URL = "http://192.168.1.10:8787"
-PC_AGENT_TOKEN = "ubah-dengan-token-aman-sendiri"
-# ==========================================
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = Path(os.getenv("DIMZBOT_ENV_FILE", str(BASE_DIR / ".env")))
+
+
+def load_env_file(path):
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return
+
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+load_env_file(ENV_PATH)
+
+TOKEN = os.getenv("TOKEN", "")
+GROUP_CHAT_ID = os.getenv("GROUP_CHAT_ID", "")
+TARGET_MAC = os.getenv("TARGET_MAC", "")
+TARGET_PC_IP = os.getenv("TARGET_PC_IP", "")
+PC_AGENT_BASE_URL = os.getenv("PC_AGENT_BASE_URL", "")
+PC_AGENT_TOKEN = os.getenv("PC_AGENT_TOKEN", "")
 
 API_BASE = f"https://api.telegram.org/bot{TOKEN}"
 CONNECT_TIMEOUT = 5

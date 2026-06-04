@@ -4,12 +4,14 @@ import string
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from config import BASE_DIR
 
 ARTIFACT_DIR = BASE_DIR / "artifacts"
 ARTIFACT_DIR.mkdir(exist_ok=True)
+CAMERA_SCAN_LIMIT = 6
+CAMERA_MIN_FRAME_STDDEV = 5.0
 
 
 class AgentFeatureError(Exception):
@@ -157,20 +159,44 @@ def capture_camera_image() -> dict:
             500,
         ) from exc
 
-    camera = cv2.VideoCapture(0)
-    if not camera.isOpened():
+    selected_frame = None
+    found_camera = False
+
+    for index in range(CAMERA_SCAN_LIMIT):
+        camera = cv2.VideoCapture(index)
+        if not camera.isOpened():
+            camera.release()
+            continue
+
+        found_camera = True
+        try:
+            ok, frame = camera.read()
+        finally:
+            camera.release()
+
+        if not ok or frame is None:
+            continue
+
+        frame_std = getattr(frame, "std", None)
+        if callable(frame_std):
+            try:
+                frame_std_value = float(cast(float, frame_std()))
+                if frame_std_value < CAMERA_MIN_FRAME_STDDEV:
+                    continue
+            except Exception:
+                pass
+
+        selected_frame = frame
+        break
+
+    if not found_camera:
         raise AgentFeatureError("camera_unavailable", "Camera tidak tersedia atau sedang dipakai", 503)
 
-    try:
-        ok, frame = camera.read()
-    finally:
-        camera.release()
-
-    if not ok or frame is None:
+    if selected_frame is None:
         raise AgentFeatureError("camera_capture_failed", "Gagal mengambil gambar dari camera", 500)
 
     output_path = ARTIFACT_DIR / f"camera-{_timestamp_slug()}.jpg"
-    if not cv2.imwrite(str(output_path), frame):
+    if not cv2.imwrite(str(output_path), selected_frame):
         raise AgentFeatureError("camera_write_failed", "Gagal menyimpan hasil camera", 500)
 
     return {

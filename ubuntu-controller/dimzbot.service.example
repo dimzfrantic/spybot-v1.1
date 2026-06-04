@@ -3,10 +3,10 @@ Description=DimzBot Master
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /opt/spybot/ubuntu-controller/masterwol.py
+ExecStart=/usr/bin/python3 /home/ubnt/spybot-publish/ubuntu-controller/masterwol.py
 Restart=always
 User=ubnt
-WorkingDirectory=/opt/spybot/ubuntu-controller
+WorkingDirectory=/home/ubnt/spybot-publish/ubuntu-controller
 
 [Install]
 WantedBy=multi-user.target

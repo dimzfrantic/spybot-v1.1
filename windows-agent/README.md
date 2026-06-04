@@ -31,6 +31,10 @@ Header wajib:
 
 ## 1. Siapkan folder kerja
 
+Catatan penting:
+- Folder `windows-agent/` di repo ini adalah source tunggal resmi untuk build Windows agent.
+- Jangan build dari salinan folder lain seperti `spybot-v1.1` agar seluruh fungsi dan patch terbaru ikut ke EXE.
+
 Contoh di PC utama:
 
 ```powershell
