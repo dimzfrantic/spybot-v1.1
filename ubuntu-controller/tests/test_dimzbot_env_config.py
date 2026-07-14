@@ -9,7 +9,7 @@ fake_wakeonlan = types.ModuleType("wakeonlan")
 fake_wakeonlan.send_magic_packet = lambda *args, **kwargs: None
 sys.modules.setdefault("wakeonlan", fake_wakeonlan)
 
-MODULE_PATH = Path("/home/ubnt/spybot-publish/ubuntu-controller/masterwol.py")
+MODULE_PATH = Path(__file__).resolve().parents[1] / "masterwol.py"
 
 
 def load_masterwol(module_name):

@@ -1,35 +1,62 @@
-# Ubuntu Controller (dimzbot)
+# Ubuntu Controller (DimzBot)
 
-Bot Telegram pusat yang berjalan di server Ubuntu dan mengendalikan PC utama Windows melalui HTTP agent.
+Controller Telegram untuk menjalankan Wake-on-LAN dan mengakses Windows Agent dari server Ubuntu.
+
+Mode yang direkomendasikan adalah DM-only:
+- Admin memakai DM bot untuk akses penuh.
+- Grup Telegram boleh dikosongkan atau tidak dipakai.
+- User terbatas, misalnya User A, hanya mendapat menu Wake-on-LAN untuk PC miliknya.
+
+## Fitur
+
+Admin DM:
+- `/menu`
+- `/nyalakanpc` untuk PC utama
+- `/status_pcutama`
+- `/status_server`
+- `/screenshot_pcutama`
+- `/camera_pcutama`
+- `/explorer_pcutama`
+- `/download_pcutama C:/path/file.ext`
+- tombol restart/shutdown PC utama
+- tombol restart server Ubuntu, jika sudoers sudah disiapkan
+
+User A terbatas:
+- `/menu` menampilkan menu terbatas
+- `/nyalakanpc` hanya mengirim Wake-on-LAN ke PC User A
+- tidak bisa akses Camera, Screenshot, Explorer, Status PC utama, Restart, Shutdown, atau Restart Server
 
 ## Isi folder
 
-- `masterwol.py` — source bot pusat
+- `masterwol.py` — source utama controller bot
+- `.env.example` — template konfigurasi aman untuk disalin menjadi `.env`
 - `requirements.txt` — dependency Python
-- `dimzbot.service.example` — contoh service systemd
-- `tests/` — test dasar helper/controller
+- `dimzbot.service.example` — contoh unit systemd
+- `tests/` — test controller
 
-## Prasyarat server Ubuntu
+## Prasyarat
 
 - Ubuntu/Debian berbasis systemd
-- Python 3.10+ direkomendasikan
+- Python 3.10+
 - Akses internet ke Telegram API
-- Akses jaringan ke PC utama Windows pada port agent (default 8787)
-- Jika ingin restart server via bot: sudoers terbatas untuk `systemctl reboot`
+- Akses jaringan ke PC Windows yang menjalankan Windows Agent
+- Wake-on-LAN aktif di BIOS/UEFI dan adapter LAN PC target
+- Token bot Telegram dari BotFather
+- Telegram user ID admin dari `@myidbot` atau log update bot
 
-## 1. Siapkan folder kerja
+## Instalasi
 
-Contoh:
+Contoh lokasi instalasi:
 
 ```bash
 sudo mkdir -p /opt/spybot
-sudo chown -R $USER:$USER /opt/spybot
+sudo chown -R "$USER:$USER" /opt/spybot
 cd /opt/spybot
 cp -r /path/ke/repo/ubuntu-controller ./ubuntu-controller
 cd ubuntu-controller
 ```
 
-## 2. Install dependency Python
+Siapkan virtualenv:
 
 ```bash
 python3 -m venv .venv
@@ -38,118 +65,136 @@ pip install -U pip
 pip install -r requirements.txt
 ```
 
-## 3. Isi konfigurasi di `.env`
+## Konfigurasi `.env`
 
 Salin template:
 
 ```bash
 cp .env.example .env
+nano .env
 ```
 
-Lalu isi nilai berikut di file `.env`:
-
-- `TOKEN`
-- `GROUP_CHAT_ID` opsional untuk grup/notifikasi lama
-- `ADMIN_TELEGRAM_ID` untuk akun Telegram yang boleh akses penuh lewat DM
-- `TARGET_MAC`
-- `TARGET_PC_IP`
-- `PC_AGENT_BASE_URL`
-- `PC_AGENT_TOKEN`
-- `PC_CAMERA_INDEX` opsional; isi `1` jika klik Camera harus memaksa Windows agent memakai `/camera?index=1`
-- `USER_A_TELEGRAM_ID`, `USER_A_PC_NAME`, `USER_A_PC_MAC`, `USER_A_PC_BROADCAST` opsional untuk 1 user fitur terbatas
-
-Contoh:
+Contoh konfigurasi aman:
 
 ```dotenv
+# Bot Telegram
 TOKEN=isi-token-bot-telegram
+
+# Mode DM-only. Kosongkan GROUP_CHAT_ID jika tidak memakai grup.
 GROUP_CHAT_ID=
 ADMIN_TELEGRAM_ID=111111111
+
+# PC utama
 TARGET_MAC=AA:BB:CC:DD:EE:FF
 TARGET_PC_IP=192.168.1.10
 PC_AGENT_BASE_URL=http://192.168.1.10:8787
 PC_AGENT_TOKEN=ubah-dengan-token-aman-sendiri
+
+# Kosongkan agar controller memanggil /camera biasa.
+# Isi 1/2/dst jika klik Camera harus memakai /camera?index=N.
 PC_CAMERA_INDEX=1
 
-# User A - fitur terbatas (DM: hanya Nyalakan PC Saya)
+# User A - fitur terbatas
 USER_A_TELEGRAM_ID=987654321
 USER_A_PC_NAME=PC User A
 USER_A_PC_MAC=11:22:33:44:55:66
 USER_A_PC_BROADCAST=10.147.20.255
 ```
 
-## 4. Uji manual
+Keterangan penting:
+- `.env` jangan di-commit ke Git.
+- `ADMIN_TELEGRAM_ID` menjadi fallback/default tujuan pesan bot jika `GROUP_CHAT_ID` kosong.
+- `GROUP_CHAT_ID` hanya diperlukan jika masih ingin mempertahankan grup Telegram lama.
+- `USER_A_PC_BROADCAST` boleh dikosongkan jika broadcast default Wake-on-LAN sudah cukup di jaringan tersebut.
+
+## Alur akses
+
+### Admin DM
+
+Jika `ADMIN_TELEGRAM_ID` cocok dengan pengirim DM:
+- bot menampilkan menu penuh
+- semua balasan command, tombol inline, file, screenshot, dan camera dikirim ke chat asal
+- hasil tidak bocor ke grup
+
+### User A terbatas
+
+Jika `USER_A_TELEGRAM_ID` cocok dengan pengirim DM:
+- `/menu` hanya menampilkan tombol `Nyalakan PC Saya`
+- `/nyalakanpc` mengirim magic packet ke `USER_A_PC_MAC`
+- command admin ditolak singkat
+
+### User lain
+
+Jika akun tidak terdaftar:
+- DM ditolak singkat
+- menu admin tidak diberikan
+
+## Uji manual
+
+Jalankan sementara dari terminal:
 
 ```bash
+source .venv/bin/activate
 python3 masterwol.py
 ```
 
-Jika berhasil, bot akan mulai polling Telegram.
+Lalu uji dari Telegram:
+- Admin DM `/menu` harus mendapat menu penuh.
+- User A DM `/menu` harus mendapat menu terbatas.
+- User A mencoba `/camera_pcutama` harus ditolak.
 
-### Akses DM admin
+Hentikan uji manual dengan `Ctrl+C` sebelum menjalankan systemd agar tidak terjadi `409 Conflict` dari Telegram API.
 
-Jika `ADMIN_TELEGRAM_ID` diisi, akun Telegram tersebut bisa DM bot dan mendapat akses penuh. Balasan `/menu`, Camera, Screenshot, Explorer, dan tombol inline akan dikirim ke chat asal, sehingga DM admin tidak bocor ke grup.
-
-`ADMIN_TELEGRAM_ID` juga menjadi tujuan default/fallback untuk pesan bot seperti notifikasi startup. Dengan begitu `GROUP_CHAT_ID` boleh dikosongkan atau grup Telegram lama boleh dihapus setelah DM admin terbukti berjalan.
-
-Akun lain yang DM bot akan ditolak singkat dan tidak mendapat menu admin.
-
-### Akses terbatas User A
-
-Jika `USER_A_TELEGRAM_ID` dan `USER_A_PC_MAC` diisi, User A bisa DM bot tanpa masuk grup utama. Menu User A hanya berisi tombol `Nyalakan PC Saya` dan command `/nyalakanpc` akan mengirim Wake-on-LAN ke `USER_A_PC_MAC`.
-
-User A tidak bisa mengakses fitur admin seperti Camera, Screenshot, Explorer, Status PC utama, Restart, atau Shutdown. Jika mencoba command/tombol admin, bot akan menolak singkat.
-
-## 5. Jadikan service systemd
+## Systemd service
 
 Salin contoh unit:
 
 ```bash
 sudo cp dimzbot.service.example /etc/systemd/system/dimzbot.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now dimzbot.service
 ```
 
-Sesuaikan `ExecStart`, `WorkingDirectory`, dan `User` bila perlu. Untuk pola seperti yang sudah dipakai di PC server Ubuntu ini, gunakan source tunggal repo dan working directory yang sama dengan file `.env`. Jika memakai virtualenv, ubah contoh `ExecStart` menjadi:
-
-```ini
-ExecStart=/opt/spybot/ubuntu-controller/.venv/bin/python /opt/spybot/ubuntu-controller/masterwol.py
-```
-
-Contoh file service aktif yang setara dengan konfigurasi server Ubuntu saat ini:
+Jika memakai virtualenv di `/opt/spybot/ubuntu-controller/.venv`, pastikan `ExecStart` mengarah ke Python virtualenv:
 
 ```ini
 [Unit]
-Description=DimzBot Master
+Description=DimzBot Controller
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/ubnt/spybot-publish/ubuntu-controller/masterwol.py
+Type=simple
+User=spybot
+WorkingDirectory=/opt/spybot/ubuntu-controller
+ExecStart=/opt/spybot/ubuntu-controller/.venv/bin/python /opt/spybot/ubuntu-controller/masterwol.py
 Restart=always
-User=ubnt
-WorkingDirectory=/home/ubnt/spybot-publish/ubuntu-controller
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Lalu aktifkan:
+Cek status:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now dimzbot.service
 sudo systemctl status dimzbot.service --no-pager -l
+journalctl -u dimzbot.service -n 100 --no-pager -l
 ```
 
-## 6. Izinkan restart server dari Telegram (opsional)
+## Izin restart server Ubuntu (opsional)
 
-Tambahkan sudoers terbatas:
+Fitur restart server hanya perlu jika tombol restart server ingin dipakai.
+
+Buat sudoers terbatas:
 
 ```bash
 sudo visudo -f /etc/sudoers.d/dimzbot-restart
 ```
 
-Isi:
+Contoh isi, sesuaikan nama user service:
 
 ```sudoers
-ubnt ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
+spybot ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
 ```
 
 Verifikasi:
@@ -159,42 +204,60 @@ sudo visudo -c
 sudo -n -l
 ```
 
-## 7. Fitur bot yang tersedia
+## Test
 
-- `/menu`
-- `/nyalakanpc`
-- `/status_pcutama`
-- `/status_server`
-- `/screenshot_pcutama`
-- `/camera_pcutama`
-- `/explorer_pcutama`
-- `/download_pcutama C:/path/file.ext`
+Jalankan dari root repo:
 
-Untuk User A terbatas:
-- `/menu` menampilkan menu terbatas
-- `/nyalakanpc` menyalakan PC User A saja
+```bash
+pytest -q ubuntu-controller/tests windows-agent/tests
+python3 -m py_compile ubuntu-controller/masterwol.py
+```
 
-## 8. Troubleshooting
+## Troubleshooting
 
-### Bot tidak merespons Telegram
-- cek token bot valid
-- cek service:
+### Bot tidak merespons
+
+Cek service dan log:
+
 ```bash
 sudo systemctl status dimzbot.service --no-pager -l
 journalctl -u dimzbot.service -n 100 --no-pager -l
 ```
 
-### Error 404 ke Telegram API
-- token bot tidak valid / terpotong
+Cek juga:
+- token bot valid
+- `.env` berada di folder yang sama dengan `masterwol.py`
+- hanya satu proses yang polling token bot yang sama
 
 ### Error 409 Conflict
-- ada script lain yang masih polling token bot yang sama
-- pastikan hanya server Ubuntu yang menjalankan polling Telegram
 
-### Restart server tidak jalan
-- cek sudoers terbatas untuk `systemctl reboot`
+Artinya ada proses lain memakai token bot yang sama. Hentikan proses manual atau service lama, lalu jalankan hanya satu controller.
 
-### Explorer/download gagal
-- cek agent Windows berjalan
-- cek IP/port agent dapat diakses dari Ubuntu
-- cek permission folder/file pada Windows
+### Error Telegram 404
+
+Token bot salah, terpotong, atau tidak terbaca dari `.env`.
+
+### Wake-on-LAN tidak menyalakan PC
+
+Cek:
+- MAC address adapter LAN benar
+- PC tersambung kabel LAN
+- Wake-on-LAN aktif di BIOS/UEFI
+- Wake on Magic Packet aktif di driver Windows
+- broadcast IP sesuai jaringan PC target
+
+### Camera/Screenshot/Explorer gagal
+
+Cek:
+- Windows Agent berjalan
+- `PC_AGENT_BASE_URL` benar
+- `PC_AGENT_TOKEN` sama dengan token agent
+- server Ubuntu dapat mengakses IP/port agent
+- firewall Windows mengizinkan koneksi agent
+
+## Catatan keamanan
+
+- Jangan commit `.env`.
+- Jangan hardcode token, chat ID asli, user ID asli, IP internal nyata, atau nama instansi di repo publik.
+- Gunakan DM-only untuk fitur sensitif.
+- Berikan user terbatas hanya akses minimum yang diperlukan.

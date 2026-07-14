@@ -1,6 +1,7 @@
 import importlib.util
 import sys
 import types
+from pathlib import Path
 
 
 fake_wakeonlan = types.ModuleType("wakeonlan")
@@ -9,7 +10,7 @@ sys.modules.setdefault("wakeonlan", fake_wakeonlan)
 
 SPEC = importlib.util.spec_from_file_location(
     "masterwol_dm_module",
-    "/home/ubnt/spybot-publish/ubuntu-controller/masterwol.py",
+    Path(__file__).resolve().parents[1] / "masterwol.py",
 )
 masterwol = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(masterwol)
