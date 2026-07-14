@@ -98,7 +98,7 @@ def test_send_explorer_listing_calls_agent_once(monkeypatch):
     sent = {}
 
     monkeypatch.setattr(masterwol, "call_pc_agent_json", fake_call)
-    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None: sent.update({"text": text, "reply_markup": reply_markup}))
+    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.update({"text": text, "reply_markup": reply_markup, "chat_id": chat_id}))
 
     masterwol.send_explorer_listing("C:/")
 
@@ -112,7 +112,7 @@ def test_send_pc_camera_uses_configured_camera_index(monkeypatch):
 
     monkeypatch.setattr(masterwol, "PC_CAMERA_INDEX", "1")
     monkeypatch.setattr(masterwol, "download_agent_file", lambda path, filename=None: calls.append((path, filename)) or "/tmp/camera.jpg")
-    monkeypatch.setattr(masterwol, "send_photo_file", lambda path, caption: None)
+    monkeypatch.setattr(masterwol, "send_photo_file", lambda path, caption, chat_id=None: None)
 
     masterwol.send_pc_camera()
 

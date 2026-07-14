@@ -49,23 +49,32 @@ cp .env.example .env
 Lalu isi nilai berikut di file `.env`:
 
 - `TOKEN`
-- `GROUP_CHAT_ID`
+- `GROUP_CHAT_ID` opsional untuk grup/notifikasi lama
+- `ADMIN_TELEGRAM_ID` untuk akun Telegram yang boleh akses penuh lewat DM
 - `TARGET_MAC`
 - `TARGET_PC_IP`
 - `PC_AGENT_BASE_URL`
 - `PC_AGENT_TOKEN`
 - `PC_CAMERA_INDEX` opsional; isi `1` jika klik Camera harus memaksa Windows agent memakai `/camera?index=1`
+- `USER_A_TELEGRAM_ID`, `USER_A_PC_NAME`, `USER_A_PC_MAC`, `USER_A_PC_BROADCAST` opsional untuk 1 user fitur terbatas
 
 Contoh:
 
 ```dotenv
 TOKEN=isi-token-bot-telegram
-GROUP_CHAT_ID=-100xxxxxxxxxx
+GROUP_CHAT_ID=
+ADMIN_TELEGRAM_ID=111111111
 TARGET_MAC=AA:BB:CC:DD:EE:FF
 TARGET_PC_IP=192.168.1.10
 PC_AGENT_BASE_URL=http://192.168.1.10:8787
 PC_AGENT_TOKEN=ubah-dengan-token-aman-sendiri
 PC_CAMERA_INDEX=1
+
+# User A - fitur terbatas (DM: hanya Nyalakan PC Saya)
+USER_A_TELEGRAM_ID=987654321
+USER_A_PC_NAME=PC User A
+USER_A_PC_MAC=11:22:33:44:55:66
+USER_A_PC_BROADCAST=10.147.20.255
 ```
 
 ## 4. Uji manual
@@ -75,6 +84,20 @@ python3 masterwol.py
 ```
 
 Jika berhasil, bot akan mulai polling Telegram.
+
+### Akses DM admin
+
+Jika `ADMIN_TELEGRAM_ID` diisi, akun Telegram tersebut bisa DM bot dan mendapat akses penuh. Balasan `/menu`, Camera, Screenshot, Explorer, dan tombol inline akan dikirim ke chat asal, sehingga DM admin tidak bocor ke grup.
+
+`ADMIN_TELEGRAM_ID` juga menjadi tujuan default/fallback untuk pesan bot seperti notifikasi startup. Dengan begitu `GROUP_CHAT_ID` boleh dikosongkan atau grup Telegram lama boleh dihapus setelah DM admin terbukti berjalan.
+
+Akun lain yang DM bot akan ditolak singkat dan tidak mendapat menu admin.
+
+### Akses terbatas User A
+
+Jika `USER_A_TELEGRAM_ID` dan `USER_A_PC_MAC` diisi, User A bisa DM bot tanpa masuk grup utama. Menu User A hanya berisi tombol `Nyalakan PC Saya` dan command `/nyalakanpc` akan mengirim Wake-on-LAN ke `USER_A_PC_MAC`.
+
+User A tidak bisa mengakses fitur admin seperti Camera, Screenshot, Explorer, Status PC utama, Restart, atau Shutdown. Jika mencoba command/tombol admin, bot akan menolak singkat.
 
 ## 5. Jadikan service systemd
 
@@ -146,6 +169,10 @@ sudo -n -l
 - `/camera_pcutama`
 - `/explorer_pcutama`
 - `/download_pcutama C:/path/file.ext`
+
+Untuk User A terbatas:
+- `/menu` menampilkan menu terbatas
+- `/nyalakanpc` menyalakan PC User A saja
 
 ## 8. Troubleshooting
 
