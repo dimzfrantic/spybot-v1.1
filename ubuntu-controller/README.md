@@ -5,7 +5,7 @@ Controller Telegram untuk menjalankan Wake-on-LAN dan mengakses Windows Agent da
 Mode yang direkomendasikan adalah DM-only:
 - Admin memakai DM bot untuk akses penuh.
 - Grup Telegram boleh dikosongkan atau tidak dipakai.
-- User terbatas, misalnya User A, hanya mendapat menu Wake-on-LAN untuk PC miliknya.
+- Setiap user dapat dipetakan ke target PC masing-masing; menu yang sama hanya berdampak pada PC milik user tersebut.
 
 ## Fitur
 
@@ -21,10 +21,10 @@ Admin DM:
 - tombol restart/shutdown PC utama
 - tombol restart server Ubuntu, jika sudoers sudah disiapkan
 
-User A terbatas:
-- `/menu` menampilkan menu terbatas
-- `/nyalakanpc` hanya mengirim Wake-on-LAN ke PC User A
-- tidak bisa akses Camera, Screenshot, Explorer, Status PC utama, Restart, Shutdown, atau Restart Server
+User/target tambahan, misalnya PC Randy:
+- `/menu` menampilkan menu penuh untuk PC miliknya sendiri
+- `/nyalakanpc`, Camera, Screenshot, Explorer, Restart, dan Shutdown hanya diarahkan ke PC milik user tersebut
+- tidak bisa restart server Ubuntu kecuali `ALLOW_SERVER_RESTART=true`
 
 ## Isi folder
 
@@ -94,11 +94,26 @@ PC_AGENT_TOKEN=ubah-dengan-token-aman-sendiri
 # Isi 1/2/dst jika klik Camera harus memakai /camera?index=N.
 PC_CAMERA_INDEX=1
 
-# User A - fitur terbatas
+# User A / PC Randy - akses penuh untuk PC miliknya sendiri
 USER_A_TELEGRAM_ID=987654321
 USER_A_PC_NAME=PC User A
 USER_A_PC_MAC=11:22:33:44:55:66
-USER_A_PC_BROADCAST=10.147.20.255
+USER_A_PC_BROADCAST=172.16.71.255
+USER_A_PC_IP=172.16.71.98
+USER_A_PC_AGENT_BASE_URL=http://172.16.71.98:8787
+USER_A_PC_AGENT_TOKEN=token-agent-user-a
+USER_A_PC_CAMERA_INDEX=
+
+# Format target tambahan untuk banyak user
+TARGET_1_OWNER_TELEGRAM_ID=222222222
+TARGET_1_NAME=PC Staff 1
+TARGET_1_MAC=22:33:44:55:66:77
+TARGET_1_BROADCAST=172.16.71.255
+TARGET_1_IP=172.16.71.99
+TARGET_1_AGENT_BASE_URL=http://172.16.71.99:8787
+TARGET_1_AGENT_TOKEN=token-agent-target-1
+TARGET_1_CAMERA_INDEX=
+TARGET_1_ALLOW_SERVER_RESTART=false
 ```
 
 Keterangan penting:
@@ -116,12 +131,13 @@ Jika `ADMIN_TELEGRAM_ID` cocok dengan pengirim DM:
 - semua balasan command, tombol inline, file, screenshot, dan camera dikirim ke chat asal
 - hasil tidak bocor ke grup
 
-### User A terbatas
+### Target per user
 
-Jika `USER_A_TELEGRAM_ID` cocok dengan pengirim DM:
-- `/menu` hanya menampilkan tombol `Nyalakan PC Saya`
-- `/nyalakanpc` mengirim magic packet ke `USER_A_PC_MAC`
-- command admin ditolak singkat
+Jika `USER_A_TELEGRAM_ID` atau `TARGET_N_OWNER_TELEGRAM_ID` cocok dengan pengirim DM:
+- `/menu` menampilkan menu untuk PC milik user tersebut
+- `/nyalakanpc` mengirim magic packet ke MAC target user tersebut
+- Camera, Screenshot, Explorer, Restart, dan Shutdown diarahkan ke agent target user tersebut
+- Restart server Ubuntu tetap hanya untuk target yang diberi `allow_server_restart`
 
 ### User lain
 
@@ -140,8 +156,8 @@ python3 masterwol.py
 
 Lalu uji dari Telegram:
 - Admin DM `/menu` harus mendapat menu penuh.
-- User A DM `/menu` harus mendapat menu terbatas.
-- User A mencoba `/camera_pcutama` harus ditolak.
+- User target tambahan DM `/menu` harus mendapat menu PC miliknya sendiri.
+- User target tambahan mencoba Camera/Screenshot/Explorer harus mengenai agent PC miliknya, bukan PC admin.
 
 Hentikan uji manual dengan `Ctrl+C` sebelum menjalankan systemd agar tidak terjadi `409 Conflict` dari Telegram API.
 
@@ -260,4 +276,4 @@ Cek:
 - Jangan commit `.env`.
 - Jangan hardcode token, chat ID asli, user ID asli, IP internal nyata, atau nama instansi di repo publik.
 - Gunakan DM-only untuk fitur sensitif.
-- Berikan user terbatas hanya akses minimum yang diperlukan.
+- Gunakan target per user agar aksi satu user tidak berdampak ke PC user lain.

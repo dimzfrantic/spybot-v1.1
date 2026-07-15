@@ -9,7 +9,7 @@ Peran utama:
 Mode operasional yang direkomendasikan untuk v1.1 adalah DM-only:
 - Admin mengakses semua fitur melalui DM bot.
 - Grup Telegram bersifat opsional dan boleh dikosongkan.
-- User terbatas dapat diberi akses minimum, misalnya hanya Wake-on-LAN untuk PC miliknya sendiri.
+- Setiap user dapat dipetakan ke target PC masing-masing; menu dan aksi user hanya berdampak pada PC miliknya.
 
 ## Status v1.1
 
@@ -17,8 +17,8 @@ Fitur yang sudah tersedia:
 - Bot Telegram pusat di Ubuntu.
 - DM admin dengan akses penuh.
 - Fallback pesan bot ke DM admin jika grup dikosongkan.
-- User A terbatas via DM untuk Wake-on-LAN PC miliknya.
-- Wake-on-LAN PC utama dan PC User A.
+- Target per user via DM, misalnya PC Randy, dengan menu penuh untuk PC miliknya sendiri.
+- Wake-on-LAN PC utama dan PC target user lain.
 - Status server Ubuntu.
 - Status PC utama via Windows Agent.
 - Screenshot PC utama.
@@ -84,7 +84,7 @@ Prinsip arsitektur:
 2. Windows Agent tidak polling Telegram.
 3. Windows Agent hanya menerima HTTP request dari controller.
 4. Akses sensitif diarahkan ke DM admin, bukan grup.
-5. User terbatas diberi fitur minimum sesuai konfigurasi `.env`.
+5. Setiap user diberi target PC sendiri sesuai konfigurasi `.env`.
 
 ## Mode akses
 
@@ -108,23 +108,40 @@ Admin mendapat akses penuh:
 - tombol restart/shutdown PC utama
 - tombol restart server Ubuntu
 
-### User A terbatas
+### Target per user
 
-User A ditentukan oleh:
+Setiap user ditentukan oleh Telegram user ID dan target PC. Contoh kompatibel untuk User A/PC Randy:
 
 ```env
 USER_A_TELEGRAM_ID=987654321
 USER_A_PC_NAME=PC User A
 USER_A_PC_MAC=11:22:33:44:55:66
-USER_A_PC_BROADCAST=10.147.20.255
+USER_A_PC_BROADCAST=172.16.71.255
+USER_A_PC_IP=172.16.71.98
+USER_A_PC_AGENT_BASE_URL=http://172.16.71.98:8787
+USER_A_PC_AGENT_TOKEN=token-agent-user-a
+USER_A_PC_CAMERA_INDEX=
 ```
 
-User A hanya mendapat:
-- `/menu` terbatas
-- `/nyalakanpc` untuk PC User A
-- tombol `Nyalakan PC Saya`
+Format yang disiapkan untuk banyak user/PC ke depan:
 
-User A tidak mendapat akses ke Camera, Screenshot, Explorer, Status PC utama, Restart, Shutdown, atau Restart Server.
+```env
+TARGET_1_OWNER_TELEGRAM_ID=222222222
+TARGET_1_NAME=PC Staff 1
+TARGET_1_MAC=22:33:44:55:66:77
+TARGET_1_BROADCAST=172.16.71.255
+TARGET_1_IP=172.16.71.99
+TARGET_1_AGENT_BASE_URL=http://172.16.71.99:8787
+TARGET_1_AGENT_TOKEN=token-agent-target-1
+TARGET_1_CAMERA_INDEX=
+TARGET_1_ALLOW_SERVER_RESTART=false
+```
+
+User target mendapat menu untuk PC miliknya sendiri:
+- `/menu` menampilkan menu PC target miliknya
+- `/nyalakanpc` menyalakan PC target miliknya
+- Camera, Screenshot, Explorer, Restart, dan Shutdown diarahkan ke Windows Agent PC target miliknya
+- Restart server Ubuntu tetap tidak diberikan kecuali target tersebut secara eksplisit diberi izin
 
 ### Grup Telegram
 
@@ -157,11 +174,15 @@ PC_AGENT_BASE_URL=http://192.168.1.10:8787
 PC_AGENT_TOKEN=ubah-dengan-token-aman-sendiri
 PC_CAMERA_INDEX=1
 
-# User A - fitur terbatas
+# User A / PC target user
 USER_A_TELEGRAM_ID=987654321
 USER_A_PC_NAME=PC User A
 USER_A_PC_MAC=11:22:33:44:55:66
-USER_A_PC_BROADCAST=10.147.20.255
+USER_A_PC_BROADCAST=172.16.71.255
+USER_A_PC_IP=172.16.71.98
+USER_A_PC_AGENT_BASE_URL=http://172.16.71.98:8787
+USER_A_PC_AGENT_TOKEN=token-agent-user-a
+USER_A_PC_CAMERA_INDEX=
 ```
 
 Catatan:
@@ -268,11 +289,12 @@ Windows Agent:
 - agent pernah dijalankan sekali jika memakai auto-start registry
 - kamera/screenshot diuji dari controller
 
-User A terbatas:
-- `USER_A_TELEGRAM_ID` sudah benar
-- `USER_A_PC_MAC` adalah MAC address adapter LAN
-- Wake-on-LAN aktif di BIOS/UEFI dan driver Windows
-- `USER_A_PC_BROADCAST` sesuai jaringan, atau dikosongkan jika default cukup
+Target user tambahan:
+- `USER_A_TELEGRAM_ID` atau `TARGET_N_OWNER_TELEGRAM_ID` sudah benar
+- MAC address adalah MAC adapter LAN target
+- Wake-on-LAN aktif di BIOS/UEFI dan driver Windows target
+- broadcast sesuai jaringan fisik target
+- agent URL/token diisi jika target diberi fitur status/camera/screenshot/explorer/restart/shutdown
 
 ## Troubleshooting singkat
 

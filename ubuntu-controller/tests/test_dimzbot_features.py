@@ -24,6 +24,20 @@ class FakeResponse:
         return self._payload
 
 
+def target(owner_id="111111111", name="PC Utama", mac="AA:BB:CC:DD:EE:FF", broadcast="", agent_url="http://pc-utama:8787", token="agent-main", camera_index="", allow_server_restart=True):
+    return {
+        "owner_id": owner_id,
+        "name": name,
+        "mac": mac,
+        "broadcast": broadcast,
+        "ip": "",
+        "agent_base_url": agent_url,
+        "agent_token": token,
+        "camera_index": camera_index,
+        "allow_server_restart": allow_server_restart,
+    }
+
+
 class FakeHTTPError(Exception):
     def __init__(self, payload):
         super().__init__("boom")
@@ -87,8 +101,8 @@ def test_format_explorer_text_only_shows_path_not_item_listing():
 def test_send_explorer_listing_calls_agent_once(monkeypatch):
     calls = []
 
-    def fake_call(method, path, params=None):
-        calls.append((method, path, params))
+    def fake_call(method, path, params=None, target=None):
+        calls.append((method, path, params, target))
         return {
             "data": {
                 "path": "C:/",
@@ -111,8 +125,8 @@ def test_send_explorer_listing_calls_agent_once(monkeypatch):
 def test_send_pc_camera_uses_configured_camera_index(monkeypatch):
     calls = []
 
-    monkeypatch.setattr(masterwol, "PC_CAMERA_INDEX", "1")
-    monkeypatch.setattr(masterwol, "download_agent_file", lambda path, filename=None: calls.append((path, filename)) or "/tmp/camera.jpg")
+    monkeypatch.setattr(masterwol, "TARGET_CONFIGS", [target(camera_index="1")])
+    monkeypatch.setattr(masterwol, "download_agent_file", lambda path, filename=None, target=None: calls.append((path, filename, target)) or "/tmp/camera.jpg")
     monkeypatch.setattr(masterwol, "send_photo_file", lambda path, caption, chat_id=None: None)
 
     masterwol.send_pc_camera()

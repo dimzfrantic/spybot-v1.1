@@ -52,6 +52,88 @@ PC_AGENT_BASE_URL = os.getenv("PC_AGENT_BASE_URL", "")
 PC_AGENT_TOKEN = os.getenv("PC_AGENT_TOKEN", "")
 PC_CAMERA_INDEX = os.getenv("PC_CAMERA_INDEX", "").strip()
 
+
+def _env(name, default=""):
+    return os.getenv(name, default).strip()
+
+
+def _target(name, owner_id, mac="", ip="", broadcast="", agent_base_url="", agent_token="", camera_index="", allow_server_restart=False):
+    return {
+        "name": name,
+        "owner_id": str(owner_id or "").strip(),
+        "mac": str(mac or "").strip(),
+        "ip": str(ip or "").strip(),
+        "broadcast": str(broadcast or "").strip(),
+        "agent_base_url": str(agent_base_url or "").strip().rstrip("/"),
+        "agent_token": str(agent_token or "").strip(),
+        "camera_index": str(camera_index or "").strip(),
+        "allow_server_restart": bool(allow_server_restart),
+    }
+
+
+def load_target_configs():
+    targets = []
+    if ADMIN_TELEGRAM_ID:
+        targets.append(_target(
+            name=_env("PC_UTAMA_NAME", "PC Utama"),
+            owner_id=ADMIN_TELEGRAM_ID,
+            mac=TARGET_MAC,
+            ip=TARGET_PC_IP,
+            broadcast=_env("TARGET_BROADCAST"),
+            agent_base_url=PC_AGENT_BASE_URL,
+            agent_token=PC_AGENT_TOKEN,
+            camera_index=PC_CAMERA_INDEX,
+            allow_server_restart=True,
+        ))
+    if USER_A_TELEGRAM_ID:
+        targets.append(_target(
+            name=USER_A_PC_NAME,
+            owner_id=USER_A_TELEGRAM_ID,
+            mac=USER_A_PC_MAC,
+            ip=_env("USER_A_PC_IP"),
+            broadcast=USER_A_PC_BROADCAST,
+            agent_base_url=_env("USER_A_PC_AGENT_BASE_URL"),
+            agent_token=_env("USER_A_PC_AGENT_TOKEN"),
+            camera_index=_env("USER_A_PC_CAMERA_INDEX"),
+            allow_server_restart=False,
+        ))
+
+    # Future-ready indexed targets. Example:
+    # TARGET_1_OWNER_TELEGRAM_ID=123; TARGET_1_NAME=PC Staff; TARGET_1_MAC=...
+    for idx in range(1, 51):
+        prefix = f"TARGET_{idx}"
+        owner_id = _env(f"{prefix}_OWNER_TELEGRAM_ID")
+        if not owner_id:
+            continue
+        targets.append(_target(
+            name=_env(f"{prefix}_NAME", f"PC User {idx}"),
+            owner_id=owner_id,
+            mac=_env(f"{prefix}_MAC"),
+            ip=_env(f"{prefix}_IP"),
+            broadcast=_env(f"{prefix}_BROADCAST"),
+            agent_base_url=_env(f"{prefix}_AGENT_BASE_URL"),
+            agent_token=_env(f"{prefix}_AGENT_TOKEN"),
+            camera_index=_env(f"{prefix}_CAMERA_INDEX"),
+            allow_server_restart=_env(f"{prefix}_ALLOW_SERVER_RESTART").lower() == "true",
+        ))
+    return targets
+
+
+TARGET_CONFIGS = load_target_configs()
+
+
+def get_target_for_user(user_id):
+    uid = str(user_id or "").strip()
+    for target in TARGET_CONFIGS:
+        if target.get("owner_id") == uid:
+            return target
+    return None
+
+
+def get_default_admin_target():
+    return get_target_for_user(ADMIN_TELEGRAM_ID) or (TARGET_CONFIGS[0] if TARGET_CONFIGS else None)
+
+
 API_BASE = f"https://api.telegram.org/bot{TOKEN}"
 CONNECT_TIMEOUT = 5
 READ_TIMEOUT = 20
@@ -92,15 +174,29 @@ def acquire_single_instance_lock():
     os.fsync(LOCK_FILE.fileno())
 
 
-def is_pc_utama_online():
-    response = os.system(f"ping -c 1 -W 1 {TARGET_PC_IP} > /dev/null 2>&1")
+def is_pc_online(target=None):
+    target = target or get_default_admin_target()
+    ip = (target or {}).get("ip") or ""
+    if not ip:
+        return False
+    response = os.system(f"ping -c 1 -W 1 {ip} > /dev/null 2>&1")
     return response == 0
 
 
+def is_pc_utama_online():
+    return is_pc_online(get_default_admin_target())
+
+
+def cek_pc_status(target=None):
+    target = target or get_default_admin_target() or {"name": "PC"}
+    name = target.get("name", "PC")
+    if is_pc_online(target):
+        return f"✅ *{name.upper()}:* `ONLINE`"
+    return f"❌ *{name.upper()}:* `OFFLINE / SHUTDOWN`"
+
+
 def cek_pc_utama():
-    if is_pc_utama_online():
-        return "✅ *PC UTAMA:* `ONLINE`"
-    return "❌ *PC UTAMA:* `OFFLINE / SHUTDOWN`"
+    return cek_pc_status(get_default_admin_target())
 
 
 def get_ubuntu_status():
@@ -128,6 +224,7 @@ def is_private_admin(user_id):
 
 
 def is_limited_user_a(user_id):
+    # Backward-compatible name: User A is now a normal per-user target owner.
     return bool(USER_A_TELEGRAM_ID and str(user_id or "") == USER_A_TELEGRAM_ID)
 
 
@@ -137,19 +234,10 @@ def is_group_admin_chat(chat_id):
 
 def is_authorized_context(chat_id=None, user_id=None, chat_type=None):
     if chat_type == "private":
-        return is_private_admin(user_id) or is_limited_user_a(user_id)
+        return get_target_for_user(user_id) is not None
     if chat_id is None and user_id is None and chat_type is None:
         return True
     return is_group_admin_chat(chat_id)
-
-
-def get_limited_user_a_menu():
-    pc_name = USER_A_PC_NAME or "PC User A"
-    return {
-        "inline_keyboard": [
-            [{"text": f"🚀 Nyalakan PC Saya ({pc_name})", "callback_data": "limited|nyalakanpc"}],
-        ]
-    }
 
 
 def send_access_denied(chat_id=None):
@@ -239,9 +327,14 @@ def send_document_file(file_path, caption=None, chat_id=None):
     return response.json()
 
 
-def call_pc_agent(method, path, params=None, stream=False):
-    url = f"{PC_AGENT_BASE_URL}{path}"
-    headers = {"X-Agent-Token": PC_AGENT_TOKEN}
+def call_pc_agent(method, path, params=None, stream=False, target=None):
+    target = target or get_default_admin_target() or {}
+    base_url = (target.get("agent_base_url") or PC_AGENT_BASE_URL).rstrip("/")
+    agent_token = target.get("agent_token") or PC_AGENT_TOKEN
+    if not base_url or not agent_token:
+        raise RuntimeError(f"Agent untuk {target.get('name', 'PC')} belum dikonfigurasi")
+    url = f"{base_url}{path}"
+    headers = {"X-Agent-Token": agent_token}
     response = SESSION.request(
         method=method,
         url=url,
@@ -254,30 +347,32 @@ def call_pc_agent(method, path, params=None, stream=False):
     return response
 
 
-def call_pc_agent_json(method, path, params=None):
-    response = call_pc_agent(method, path, params=params, stream=False)
+def call_pc_agent_json(method, path, params=None, target=None):
+    response = call_pc_agent(method, path, params=params, stream=False, target=target)
     return response.json()
 
 
-def download_agent_file(path, suggested_name=None):
-    response = call_pc_agent("GET", path, stream=True)
+def download_agent_file(path, suggested_name=None, target=None):
+    response = call_pc_agent("GET", path, stream=True, target=target)
     parsed = urlparse(path)
     query_path = parse_qs(parsed.query).get("path", [None])[0]
     fallback_name = suggested_name or (Path(query_path).name if query_path else None) or Path(parsed.path).name or f"agent-{int(time.time())}.bin"
     filename = _get_filename_from_headers(response, fallback_name)
-    target = TMP_DOWNLOAD_DIR / filename
-    with open(target, "wb") as fh:
+    target_file = TMP_DOWNLOAD_DIR / filename
+    with open(target_file, "wb") as fh:
         for chunk in response.iter_content(chunk_size=1024 * 64):
             if chunk:
                 fh.write(chunk)
-    return target
+    return target_file
 
 
-def get_pc_agent_status_text():
-    payload = call_pc_agent_json("GET", "/status")
+def get_pc_agent_status_text(target=None):
+    target = target or get_default_admin_target() or {"name": "PC"}
+    payload = call_pc_agent_json("GET", "/status", target=target)
     data = payload.get("data", {})
+    name = target.get("name", "PC")
     return (
-        "🖥 *STATUS PC UTAMA (WINDOWS AGENT)*\n"
+        f"🖥 *STATUS {name.upper()} (WINDOWS AGENT)*\n"
         "━━━━━━━━━━━━━━━━━━\n"
         f"📛 *Host:* `{data.get('host', '-')}`\n"
         f"👤 *User:* `{data.get('user', '-')}`\n"
@@ -290,11 +385,13 @@ def get_pc_agent_status_text():
     )
 
 
-def format_explorer_text(data):
+def format_explorer_text(data, target=None):
+    target = target or get_default_admin_target() or {"name": "PC"}
+    name = target.get("name", "PC")
     current_path = data.get("path", "drives:/")
     item_count = len(data.get("items", []))
     return (
-        "🗂 *EXPLORER PC UTAMA*\n"
+        f"🗂 *EXPLORER {name.upper()}*\n"
         "━━━━━━━━━━━━━━━━━━\n"
         f"📍 *Path:* `{current_path}`\n"
         f"📦 *Jumlah item:* `{item_count}`\n"
@@ -313,23 +410,29 @@ def format_agent_error(exc, prefix):
     return f"⚠️ {prefix} (`{type(exc).__name__}`)."
 
 
-def send_pc_screenshot(chat_id=None):
-    target = download_agent_file("/screenshot", f"pc-utama-screenshot-{int(time.time())}.jpg")
-    send_photo_file(target, "🖼 *Screenshot PC utama berhasil diambil.*", chat_id=chat_id)
+def send_pc_screenshot(chat_id=None, target=None):
+    target = target or get_default_admin_target() or {"name": "PC"}
+    slug = target.get("name", "pc").lower().replace(" ", "-")
+    target_file = download_agent_file("/screenshot", f"{slug}-screenshot-{int(time.time())}.jpg", target=target)
+    send_photo_file(target_file, f"🖼 *Screenshot {target.get('name', 'PC')} berhasil diambil.*", chat_id=chat_id)
 
 
-def send_pc_camera(chat_id=None):
+def send_pc_camera(chat_id=None, target=None):
+    target = target or get_default_admin_target() or {"name": "PC"}
     camera_path = "/camera"
-    if PC_CAMERA_INDEX:
-        camera_path = f"/camera?index={quote(PC_CAMERA_INDEX, safe='')}"
-    target = download_agent_file(camera_path, f"pc-utama-camera-{int(time.time())}.jpg")
-    send_photo_file(target, "📷 *Hasil camera PC utama berhasil diambil.*", chat_id=chat_id)
+    camera_index = target.get("camera_index") or ""
+    if camera_index:
+        camera_path = f"/camera?index={quote(camera_index, safe='')}"
+    slug = target.get("name", "pc").lower().replace(" ", "-")
+    target_file = download_agent_file(camera_path, f"{slug}-camera-{int(time.time())}.jpg", target=target)
+    send_photo_file(target_file, f"📷 *Hasil camera {target.get('name', 'PC')} berhasil diambil.*", chat_id=chat_id)
 
 
-def send_pc_download(target_path, chat_id=None):
+def send_pc_download(target_path, chat_id=None, target=None):
+    target = target or get_default_admin_target() or {"name": "PC"}
     encoded_path = quote(target_path, safe="")
-    target = download_agent_file(f"/download?path={encoded_path}")
-    send_document_file(target, f"📦 *File dari PC utama:* `{target_path}`", chat_id=chat_id)
+    target_file = download_agent_file(f"/download?path={encoded_path}", target=target)
+    send_document_file(target_file, f"📦 *File dari {target.get('name', 'PC')}:* `{target_path}`", chat_id=chat_id)
 
 
 def get_parent_windows_path(target_path):
@@ -386,22 +489,24 @@ def restart_server_now():
     return worker.pid
 
 
-def get_main_menu(pc_online):
+def get_main_menu(pc_online, target=None):
+    target = target or get_default_admin_target() or {"name": "PC", "allow_server_restart": False}
+    name = target.get("name", "PC")
     buttons = []
     if pc_online:
-        buttons.append([{"text": "🖥 Status PC Utama", "callback_data": "menu|status_pcutama"}])
+        buttons.append([{"text": f"🖥 Status {name}", "callback_data": "menu|status_pcutama"}])
         buttons.append([
             {"text": "🖼 Screenshot", "callback_data": "menu|screenshot_pcutama"},
             {"text": "📷 Camera", "callback_data": "menu|camera_pcutama"},
         ])
         buttons.append([{"text": "🗂 Explorer", "callback_data": "menu|explorer_root"}])
         buttons.append([
-            {"text": "🔄 Restart PC Utama", "callback_data": "menu|restart_pcutama"},
-            {"text": "🛑 Shutdown PC Utama", "callback_data": "menu|shutdown_pcutama"},
+            {"text": f"🔄 Restart {name}", "callback_data": "menu|restart_pcutama"},
+            {"text": f"🛑 Shutdown {name}", "callback_data": "menu|shutdown_pcutama"},
         ])
-        buttons.append([{"text": "🔁 Restart PC Server", "callback_data": "menu|restart_server"}])
     else:
-        buttons.append([{"text": "🚀 Nyalakan PC Utama", "callback_data": "menu|nyalakanpc"}])
+        buttons.append([{"text": f"🚀 Nyalakan {name}", "callback_data": "menu|nyalakanpc"}])
+    if target.get("allow_server_restart"):
         buttons.append([{"text": "🔁 Restart PC Server", "callback_data": "menu|restart_server"}])
 
     return {"inline_keyboard": buttons}
@@ -469,12 +574,12 @@ def get_explorer_menu(items, current_path, page=0):
     return {"inline_keyboard": rows}
 
 
-def send_explorer_listing(target_path=None, page=0, chat_id=None):
-    payload = call_pc_agent_json("GET", "/explorer", params={"path": target_path} if target_path else None)
+def send_explorer_listing(target_path=None, page=0, chat_id=None, target=None):
+    payload = call_pc_agent_json("GET", "/explorer", params={"path": target_path} if target_path else None, target=target)
     data = payload.get("data", {})
     resolved_path = data.get("path", target_path or "drives:/")
     send_msg(
-        format_explorer_text(data),
+        format_explorer_text(data, target=target),
         get_explorer_menu(data.get("items", []), resolved_path, page=page),
         chat_id=chat_id,
     )
@@ -483,6 +588,7 @@ def send_explorer_listing(target_path=None, page=0, chat_id=None):
 def handle_command(text, chat_id=None, user_id=None, chat_type=None):
     txt = text.lower().strip()
     target_chat_id = resolve_chat_id(chat_id)
+    target = get_target_for_user(user_id)
 
     if not is_authorized_context(chat_id=target_chat_id, user_id=user_id, chat_type=chat_type):
         if chat_type == "private":
@@ -491,88 +597,86 @@ def handle_command(text, chat_id=None, user_id=None, chat_type=None):
         logger.warning("Ignoring unauthorized command from chat_id=%s user_id=%s type=%s", chat_id, user_id, chat_type)
         return False
 
-    if is_limited_user_a(user_id):
-        if txt in ["/menu", "/start"]:
-            send_msg(
-                f"👤 *Menu Terbatas*\nAkses untuk `{USER_A_PC_NAME}`.",
-                get_limited_user_a_menu(),
-                chat_id=target_chat_id,
-            )
-            return True
-        if txt == "/nyalakanpc":
-            wake_pc(USER_A_PC_MAC, USER_A_PC_NAME, chat_id=target_chat_id, broadcast=USER_A_PC_BROADCAST)
-            return True
-        send_access_denied(chat_id=target_chat_id)
-        return True
+    if target is None:
+        target = get_default_admin_target()
+    target_name = (target or {}).get("name", "PC")
 
     if txt in ["/menu", "/start"]:
-        pc_online = is_pc_utama_online()
-        status_server = get_ubuntu_status()
-        status_pc = cek_pc_utama()
-        send_msg(
-            f"{status_server}\n\n{status_pc}",
-            get_main_menu(pc_online),
-            chat_id=target_chat_id,
-        )
+        pc_online = is_pc_online(target)
+        status_server = get_ubuntu_status() if (target or {}).get("allow_server_restart") else ""
+        status_pc = cek_pc_status(target)
+        message = f"{status_server}\n\n{status_pc}" if status_server else status_pc
+        send_msg(message, get_main_menu(pc_online, target), chat_id=target_chat_id)
         return True
 
     if txt == "/nyalakanpc":
-        wake_pc(TARGET_MAC, "PC Utama", chat_id=target_chat_id)
+        wake_pc((target or {}).get("mac"), target_name, chat_id=target_chat_id, broadcast=(target or {}).get("broadcast"))
         return True
 
-    if txt == "/status_pcutama":
+    if txt in ["/status", "/status_pcutama"]:
         try:
-            send_msg(get_pc_agent_status_text(), chat_id=target_chat_id)
+            send_msg(get_pc_agent_status_text(target=target), chat_id=target_chat_id)
         except Exception as exc:
-            logger.exception("Failed to fetch Windows agent status for /status_pcutama")
-            send_msg(f"⚠️ Gagal mengambil status PC utama dari agent (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to fetch Windows agent status for %s", target_name)
+            send_msg(f"⚠️ Gagal mengambil status {target_name} dari agent (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
-    if txt == "/screenshot_pcutama":
+    if txt in ["/screenshot", "/screenshot_pcutama"]:
         try:
-            send_pc_screenshot(chat_id=target_chat_id)
+            send_pc_screenshot(chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to fetch screenshot for /screenshot_pcutama")
-            send_msg(f"⚠️ Gagal mengambil screenshot PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to fetch screenshot for %s", target_name)
+            send_msg(f"⚠️ Gagal mengambil screenshot {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
-    if txt == "/camera_pcutama":
+    if txt in ["/camera", "/camera_pcutama"]:
         try:
-            send_pc_camera(chat_id=target_chat_id)
+            send_pc_camera(chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to fetch camera for /camera_pcutama")
-            send_msg(f"⚠️ Gagal mengambil camera PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to fetch camera for %s", target_name)
+            send_msg(f"⚠️ Gagal mengambil camera {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
-    if txt.startswith("/explorer_pcutama"):
-        target_path = text[len("/explorer_pcutama"):].strip() or None
+    if txt.startswith("/explorer") or txt.startswith("/explorer_pcutama"):
+        if txt.startswith("/explorer_pcutama"):
+            target_path = text[len("/explorer_pcutama"):].strip() or None
+        else:
+            target_path = text[len("/explorer"):].strip() or None
         try:
-            send_explorer_listing(target_path, chat_id=target_chat_id)
+            send_explorer_listing(target_path, chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to open explorer for /explorer_pcutama")
-            send_msg(f"⚠️ Gagal membuka explorer PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to open explorer for %s", target_name)
+            send_msg(f"⚠️ Gagal membuka explorer {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
-    if txt.startswith("/download_pcutama"):
-        target_path = text[len("/download_pcutama"):].strip()
+    if txt.startswith("/download") or txt.startswith("/download_pcutama"):
+        if txt.startswith("/download_pcutama"):
+            target_path = text[len("/download_pcutama"):].strip()
+        else:
+            target_path = text[len("/download"):].strip()
         if not target_path:
-            send_msg("⚠️ Format download: `/download_pcutama C:/path/file.ext`", chat_id=target_chat_id)
+            send_msg("⚠️ Format download: `/download C:/path/file.ext`", chat_id=target_chat_id)
             return True
         try:
-            send_pc_download(target_path, chat_id=target_chat_id)
+            send_pc_download(target_path, chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to download file for /download_pcutama")
-            send_msg(f"⚠️ Gagal mengunduh file PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to download file for %s", target_name)
+            send_msg(f"⚠️ Gagal mengunduh file {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
     if txt in ["/status_server", "/status_all", f"/status_{MY_HOSTNAME}"]:
-        send_msg(get_ubuntu_status(), chat_id=target_chat_id)
+        if (target or {}).get("allow_server_restart"):
+            send_msg(get_ubuntu_status(), chat_id=target_chat_id)
+        else:
+            send_access_denied(chat_id=target_chat_id)
         return True
 
     return False
 
+
 def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, chat_type=None):
     target_chat_id = resolve_chat_id(chat_id)
+    target = get_target_for_user(user_id)
     if not is_authorized_context(chat_id=target_chat_id, user_id=user_id, chat_type=chat_type):
         if chat_type == "private":
             send_msg("⛔ Maaf, akun Telegram ini tidak memiliki akses ke DimzBot.", chat_id=target_chat_id)
@@ -580,57 +684,50 @@ def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, 
         logger.warning("Ignoring unauthorized callback from chat_id=%s user_id=%s type=%s", chat_id, user_id, chat_type)
         return False
 
-    if is_limited_user_a(user_id):
-        if callback_data == "menu|open":
-            send_msg(
-                f"👤 *Menu Terbatas*\nAkses untuk `{USER_A_PC_NAME}`.",
-                get_limited_user_a_menu(),
-                chat_id=target_chat_id,
-            )
-            return True
-        if callback_data == "limited|nyalakanpc":
-            wake_pc(USER_A_PC_MAC, USER_A_PC_NAME, chat_id=target_chat_id, broadcast=USER_A_PC_BROADCAST)
-            return True
-        send_access_denied(chat_id=target_chat_id)
-        return True
+    if target is None:
+        target = get_default_admin_target()
+    target_name = (target or {}).get("name", "PC")
 
-    if callback_data == "menu|open":
-        pc_online = is_pc_utama_online()
-        send_msg(f"{get_ubuntu_status()}\n\n{cek_pc_utama()}", get_main_menu(pc_online), chat_id=target_chat_id)
+    if callback_data in ["menu|open", "limited|open"]:
+        pc_online = is_pc_online(target)
+        status_server = get_ubuntu_status() if (target or {}).get("allow_server_restart") else ""
+        status_pc = cek_pc_status(target)
+        message = f"{status_server}\n\n{status_pc}" if status_server else status_pc
+        send_msg(message, get_main_menu(pc_online, target), chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|status_pcutama":
         try:
-            send_msg(get_pc_agent_status_text(), chat_id=target_chat_id)
+            send_msg(get_pc_agent_status_text(target=target), chat_id=target_chat_id)
         except Exception as exc:
-            logger.exception("Failed to fetch Windows agent status from callback")
-            send_msg(f"⚠️ Gagal mengambil status PC utama dari agent (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to fetch Windows agent status from callback for %s", target_name)
+            send_msg(f"⚠️ Gagal mengambil status {target_name} dari agent (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|screenshot_pcutama":
         send_msg("🖼 *Screenshot sedang diproses...*\nMohon tunggu sebentar.", chat_id=target_chat_id)
         try:
-            send_pc_screenshot(chat_id=target_chat_id)
+            send_pc_screenshot(chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to fetch screenshot from agent")
-            send_msg(f"⚠️ Gagal mengambil screenshot PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to fetch screenshot from agent for %s", target_name)
+            send_msg(f"⚠️ Gagal mengambil screenshot {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|camera_pcutama":
         send_msg("📷 *Camera sedang diproses...*\nMohon tunggu sebentar.", chat_id=target_chat_id)
         try:
-            send_pc_camera(chat_id=target_chat_id)
+            send_pc_camera(chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to fetch camera image from agent")
-            send_msg(f"⚠️ Gagal mengambil camera PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            logger.exception("Failed to fetch camera image from agent for %s", target_name)
+            send_msg(f"⚠️ Gagal mengambil camera {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|explorer_root":
         try:
-            send_explorer_listing(chat_id=target_chat_id)
+            send_explorer_listing(chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to open explorer root from agent")
-            send_msg(format_agent_error(exc, "Gagal membuka explorer PC utama"), chat_id=target_chat_id)
+            logger.exception("Failed to open explorer root from agent for %s", target_name)
+            send_msg(format_agent_error(exc, f"Gagal membuka explorer {target_name}"), chat_id=target_chat_id)
         return True
 
     if callback_data.startswith("explorer|dir|"):
@@ -644,38 +741,40 @@ def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, 
             except ValueError:
                 page = 0
         try:
-            send_explorer_listing(target_path, page=page, chat_id=target_chat_id)
+            send_explorer_listing(target_path, page=page, chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to browse directory from agent")
-            send_msg(format_agent_error(exc, "Gagal membuka folder PC utama"), chat_id=target_chat_id)
+            logger.exception("Failed to browse directory from agent for %s", target_name)
+            send_msg(format_agent_error(exc, f"Gagal membuka folder {target_name}"), chat_id=target_chat_id)
         return True
 
     if callback_data.startswith("explorer|file|"):
         _, _, raw_target, *_ = callback_data.split("|")
-        target_token = raw_target
-        target_path = resolve_explorer_path(target_token)
+        target_path = resolve_explorer_path(raw_target)
         try:
-            send_pc_download(target_path, chat_id=target_chat_id)
+            send_pc_download(target_path, chat_id=target_chat_id, target=target)
         except Exception as exc:
-            logger.exception("Failed to download file from agent")
-            send_msg(format_agent_error(exc, "Gagal mengunduh file PC utama"), chat_id=target_chat_id)
+            logger.exception("Failed to download file from agent for %s", target_name)
+            send_msg(format_agent_error(exc, f"Gagal mengunduh file {target_name}"), chat_id=target_chat_id)
         return True
 
-    if callback_data == "menu|nyalakanpc":
-        wake_pc(TARGET_MAC, "PC Utama", chat_id=target_chat_id)
+    if callback_data in ["menu|nyalakanpc", "limited|nyalakanpc"]:
+        wake_pc((target or {}).get("mac"), target_name, chat_id=target_chat_id, broadcast=(target or {}).get("broadcast"))
         return True
 
     if callback_data == "menu|restart_pcutama":
-        confirmation = get_confirmation_menu("restart_pcutama", "Apakah Bapak yakin ingin merestart PC utama?")
+        confirmation = get_confirmation_menu("restart_pcutama", f"Apakah Bapak yakin ingin merestart {target_name}?")
         send_msg(confirmation["text"], {"inline_keyboard": confirmation["inline_keyboard"]}, chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|shutdown_pcutama":
-        confirmation = get_confirmation_menu("shutdown_pcutama", "Apakah Bapak yakin ingin mematikan PC utama?")
+        confirmation = get_confirmation_menu("shutdown_pcutama", f"Apakah Bapak yakin ingin mematikan {target_name}?")
         send_msg(confirmation["text"], {"inline_keyboard": confirmation["inline_keyboard"]}, chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|restart_server":
+        if not (target or {}).get("allow_server_restart"):
+            send_access_denied(chat_id=target_chat_id)
+            return True
         confirmation = get_confirmation_menu("restart_server", "Apakah Bapak yakin ingin merestart PC server?")
         send_msg(confirmation["text"], {"inline_keyboard": confirmation["inline_keyboard"]}, chat_id=target_chat_id)
         return True
@@ -688,23 +787,26 @@ def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, 
 
         if action == "restart_pcutama":
             try:
-                call_pc_agent_json("POST", "/restart")
-                send_msg("🔄 *Perintah restart PC utama telah diteruskan ke Windows agent.*", chat_id=target_chat_id)
+                call_pc_agent_json("POST", "/restart", target=target)
+                send_msg(f"🔄 *Perintah restart {target_name} telah diteruskan ke Windows agent.*", chat_id=target_chat_id)
             except Exception as exc:
-                logger.exception("Failed to restart PC utama via agent")
-                send_msg(f"⚠️ Gagal meneruskan restart PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+                logger.exception("Failed to restart %s via agent", target_name)
+                send_msg(f"⚠️ Gagal meneruskan restart {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
             return True
 
         if action == "shutdown_pcutama":
             try:
-                call_pc_agent_json("POST", "/shutdown")
-                send_msg("🛑 *Perintah shutdown PC utama telah diteruskan ke Windows agent.*", chat_id=target_chat_id)
+                call_pc_agent_json("POST", "/shutdown", target=target)
+                send_msg(f"🛑 *Perintah shutdown {target_name} telah diteruskan ke Windows agent.*", chat_id=target_chat_id)
             except Exception as exc:
-                logger.exception("Failed to shutdown PC utama via agent")
-                send_msg(f"⚠️ Gagal meneruskan shutdown PC utama (`{type(exc).__name__}`).", chat_id=target_chat_id)
+                logger.exception("Failed to shutdown %s via agent", target_name)
+                send_msg(f"⚠️ Gagal meneruskan shutdown {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
             return True
 
         if action == "restart_server":
+            if not (target or {}).get("allow_server_restart"):
+                send_access_denied(chat_id=target_chat_id)
+                return True
             send_msg("🔁 *PC server sedang diproses untuk restart...*\nMohon tunggu sebentar.", chat_id=target_chat_id)
             try:
                 restart_server_now()
@@ -714,7 +816,10 @@ def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, 
             return True
 
     if callback_data == "menu|status_server":
-        send_msg(get_ubuntu_status(), chat_id=target_chat_id)
+        if (target or {}).get("allow_server_restart"):
+            send_msg(get_ubuntu_status(), chat_id=target_chat_id)
+        else:
+            send_access_denied(chat_id=target_chat_id)
         return True
 
     return False

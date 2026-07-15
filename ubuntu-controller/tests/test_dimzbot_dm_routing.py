@@ -16,6 +16,20 @@ masterwol = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(masterwol)
 
 
+def target(owner_id="987654321", name="PC User A", mac="AA:BB:CC:DD:EE:FF", broadcast="10.147.20.255", agent_url="http://pc-user-a:8787", token="agent-user-a", allow_server_restart=False):
+    return {
+        "owner_id": owner_id,
+        "name": name,
+        "mac": mac,
+        "broadcast": broadcast,
+        "ip": "",
+        "agent_base_url": agent_url,
+        "agent_token": token,
+        "camera_index": "",
+        "allow_server_restart": allow_server_restart,
+    }
+
+
 class FakeResponse:
     def raise_for_status(self):
         return None
@@ -96,12 +110,11 @@ def test_private_non_admin_cannot_open_full_menu(monkeypatch):
     assert "tidak memiliki akses" in sent[0][0].lower()
 
 
-def test_limited_user_gets_limited_menu_only(monkeypatch):
+def test_user_target_gets_full_menu_for_own_pc(monkeypatch):
     sent = []
 
-    monkeypatch.setattr(masterwol, "ADMIN_TELEGRAM_ID", "111111111")
-    monkeypatch.setattr(masterwol, "USER_A_TELEGRAM_ID", "987654321")
-    monkeypatch.setattr(masterwol, "USER_A_PC_NAME", "PC User A")
+    monkeypatch.setattr(masterwol, "TARGET_CONFIGS", [target(name="PC Randy")])
+    monkeypatch.setattr(masterwol, "is_pc_online", lambda selected_target=None: True)
     monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.append((text, reply_markup, chat_id)))
 
     handled = masterwol.handle_command(
@@ -115,16 +128,18 @@ def test_limited_user_gets_limited_menu_only(monkeypatch):
     assert sent[0][2] == "987654321"
     labels = [button["text"] for row in sent[0][1]["inline_keyboard"] for button in row]
     callbacks = [button["callback_data"] for row in sent[0][1]["inline_keyboard"] for button in row]
-    assert any("Nyalakan PC Saya" in label for label in labels)
-    assert "limited|nyalakanpc" in callbacks
-    assert all("Camera" not in label and "Screenshot" not in label and "Explorer" not in label for label in labels)
+    assert any("Status PC Randy" in label for label in labels)
+    assert any("Camera" in label for label in labels)
+    assert any("Screenshot" in label for label in labels)
+    assert any("Explorer" in label for label in labels)
+    assert "menu|restart_server" not in callbacks
 
 
-def test_limited_user_start_opens_limited_menu(monkeypatch):
+def test_user_start_opens_full_menu_for_own_pc(monkeypatch):
     sent = []
 
-    monkeypatch.setattr(masterwol, "USER_A_TELEGRAM_ID", "987654321")
-    monkeypatch.setattr(masterwol, "USER_A_PC_NAME", "PC User A")
+    monkeypatch.setattr(masterwol, "TARGET_CONFIGS", [target(name="PC Randy")])
+    monkeypatch.setattr(masterwol, "is_pc_online", lambda selected_target=None: False)
     monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.append((text, reply_markup, chat_id)))
 
     handled = masterwol.handle_command(
@@ -136,7 +151,8 @@ def test_limited_user_start_opens_limited_menu(monkeypatch):
 
     assert handled is True
     assert sent[0][2] == "987654321"
-    assert sent[0][1]["inline_keyboard"][0][0]["callback_data"] == "limited|nyalakanpc"
+    assert sent[0][1]["inline_keyboard"][0][0]["callback_data"] == "menu|nyalakanpc"
+    assert "PC Randy" in sent[0][1]["inline_keyboard"][0][0]["text"]
 
 
 def test_limited_user_wake_command_uses_user_a_mac(monkeypatch):
@@ -144,10 +160,7 @@ def test_limited_user_wake_command_uses_user_a_mac(monkeypatch):
     packets = []
     sleeps = []
 
-    monkeypatch.setattr(masterwol, "USER_A_TELEGRAM_ID", "987654321")
-    monkeypatch.setattr(masterwol, "USER_A_PC_NAME", "PC User A")
-    monkeypatch.setattr(masterwol, "USER_A_PC_MAC", "AA:BB:CC:DD:EE:FF")
-    monkeypatch.setattr(masterwol, "USER_A_PC_BROADCAST", "10.147.20.255")
+    monkeypatch.setattr(masterwol, "TARGET_CONFIGS", [target()])
     monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.append((text, chat_id)))
     monkeypatch.setattr(masterwol, "send_wol_packet", lambda mac, broadcast=None: packets.append((mac, broadcast)))
     monkeypatch.setattr(masterwol.time, "sleep", lambda seconds: sleeps.append(seconds))
@@ -165,12 +178,12 @@ def test_limited_user_wake_command_uses_user_a_mac(monkeypatch):
     assert "PC User A" in sent[-1][0]
 
 
-def test_limited_user_cannot_access_admin_camera(monkeypatch):
+def test_user_camera_targets_own_pc(monkeypatch):
     sent = []
     called = []
 
-    monkeypatch.setattr(masterwol, "USER_A_TELEGRAM_ID", "987654321")
-    monkeypatch.setattr(masterwol, "send_pc_camera", lambda chat_id=None: called.append(chat_id))
+    monkeypatch.setattr(masterwol, "TARGET_CONFIGS", [target()])
+    monkeypatch.setattr(masterwol, "send_pc_camera", lambda chat_id=None, target=None: called.append(target))
     monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.append((text, chat_id)))
 
     handled = masterwol.handle_command(
@@ -181,5 +194,24 @@ def test_limited_user_cannot_access_admin_camera(monkeypatch):
     )
 
     assert handled is True
-    assert called == []
-    assert "tidak memiliki akses" in sent[-1][0].lower()
+    assert called and called[0]["name"] == "PC User A"
+
+
+def test_agent_call_uses_selected_user_target_credentials(monkeypatch):
+    requests_seen = []
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    def fake_request(**kwargs):
+        requests_seen.append(kwargs)
+        return Response()
+
+    user_target = target(agent_url="http://pc-randy:8787", token="token-randy")
+    monkeypatch.setattr(masterwol.SESSION, "request", fake_request)
+
+    masterwol.call_pc_agent("GET", "/status", target=user_target)
+
+    assert requests_seen[0]["url"] == "http://pc-randy:8787/status"
+    assert requests_seen[0]["headers"] == {"X-Agent-Token": "token-randy"}
