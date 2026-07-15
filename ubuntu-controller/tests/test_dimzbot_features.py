@@ -152,6 +152,28 @@ def test_user_explorer_root_can_default_to_c_drive(monkeypatch):
     assert calls[0][2] == {"path": "C:/"}
 
 
+def test_explorer_root_falls_back_to_drive_probe_when_agent_root_fails(monkeypatch):
+    calls = []
+    sent = {}
+
+    def fake_call(method, path, params=None, target=None):
+        calls.append((method, path, params, target))
+        if params is None:
+            raise RuntimeError("root failed")
+        if params.get("path") in ["C:/", "D:/"]:
+            return {"data": {"path": params["path"], "items": []}}
+        raise RuntimeError("drive missing")
+
+    monkeypatch.setattr(masterwol, "call_pc_agent_json", fake_call)
+    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.update({"text": text, "reply_markup": reply_markup}))
+
+    masterwol.send_explorer_listing(target={"name": "PC Randy", "explorer_root": ""})
+
+    labels = [btn["text"] for row in sent["reply_markup"]["inline_keyboard"] for btn in row]
+    assert "📁 C:" in labels
+    assert "📁 D:" in labels
+
+
 def test_send_pc_camera_uses_configured_camera_index(monkeypatch):
     calls = []
 

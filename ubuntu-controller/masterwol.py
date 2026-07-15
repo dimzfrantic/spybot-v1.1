@@ -5,6 +5,7 @@ import logging
 import ntpath
 import os
 import socket
+import string
 import subprocess
 import sys
 import time
@@ -582,7 +583,12 @@ def get_explorer_menu(items, current_path, page=0):
 def send_explorer_listing(target_path=None, page=0, chat_id=None, target=None):
     target = target or get_default_admin_target() or {}
     requested_path = target_path if target_path else target.get("explorer_root", "C:/")
-    payload = call_pc_agent_json("GET", "/explorer", params={"path": requested_path} if requested_path else None, target=target)
+    try:
+        payload = call_pc_agent_json("GET", "/explorer", params={"path": requested_path} if requested_path else None, target=target)
+    except Exception as exc:
+        if target_path or requested_path:
+            raise
+        payload = probe_windows_drive_listing(target=target, original_error=exc)
     data = payload.get("data", {})
     resolved_path = data.get("path", requested_path or "drives:/")
     send_msg(
@@ -590,6 +596,21 @@ def send_explorer_listing(target_path=None, page=0, chat_id=None, target=None):
         get_explorer_menu(data.get("items", []), resolved_path, page=page),
         chat_id=chat_id,
     )
+
+
+def probe_windows_drive_listing(target=None, original_error=None):
+    items = []
+    for letter in string.ascii_uppercase:
+        drive_path = f"{letter}:/"
+        try:
+            call_pc_agent_json("GET", "/explorer", params={"path": drive_path}, target=target)
+        except Exception:
+            continue
+        items.append({"name": f"{letter}:", "path": drive_path, "type": "dir"})
+
+    if not items and original_error:
+        raise original_error
+    return {"ok": True, "data": {"ok": True, "path": "drives:/", "items": items}}
 
 
 def handle_command(text, chat_id=None, user_id=None, chat_type=None):
