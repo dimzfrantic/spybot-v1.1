@@ -120,6 +120,25 @@ def test_limited_user_gets_limited_menu_only(monkeypatch):
     assert all("Camera" not in label and "Screenshot" not in label and "Explorer" not in label for label in labels)
 
 
+def test_limited_user_start_opens_limited_menu(monkeypatch):
+    sent = []
+
+    monkeypatch.setattr(masterwol, "USER_A_TELEGRAM_ID", "987654321")
+    monkeypatch.setattr(masterwol, "USER_A_PC_NAME", "PC User A")
+    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.append((text, reply_markup, chat_id)))
+
+    handled = masterwol.handle_command(
+        "/start",
+        chat_id="987654321",
+        user_id="987654321",
+        chat_type="private",
+    )
+
+    assert handled is True
+    assert sent[0][2] == "987654321"
+    assert sent[0][1]["inline_keyboard"][0][0]["callback_data"] == "limited|nyalakanpc"
+
+
 def test_limited_user_wake_command_uses_user_a_mac(monkeypatch):
     sent = []
     packets = []

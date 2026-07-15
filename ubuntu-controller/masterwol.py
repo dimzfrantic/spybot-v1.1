@@ -492,7 +492,7 @@ def handle_command(text, chat_id=None, user_id=None, chat_type=None):
         return False
 
     if is_limited_user_a(user_id):
-        if txt == "/menu":
+        if txt in ["/menu", "/start"]:
             send_msg(
                 f"👤 *Menu Terbatas*\nAkses untuk `{USER_A_PC_NAME}`.",
                 get_limited_user_a_menu(),
@@ -505,7 +505,7 @@ def handle_command(text, chat_id=None, user_id=None, chat_type=None):
         send_access_denied(chat_id=target_chat_id)
         return True
 
-    if txt == "/menu":
+    if txt in ["/menu", "/start"]:
         pc_online = is_pc_utama_online()
         status_server = get_ubuntu_status()
         status_pc = cek_pc_utama()
