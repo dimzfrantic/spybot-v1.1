@@ -57,7 +57,7 @@ def _env(name, default=""):
     return os.getenv(name, default).strip()
 
 
-def _target(name, owner_id, mac="", ip="", broadcast="", agent_base_url="", agent_token="", camera_index="", allow_server_restart=False):
+def _target(name, owner_id, mac="", ip="", broadcast="", agent_base_url="", agent_token="", camera_index="", explorer_root="C:/", allow_server_restart=False):
     return {
         "name": name,
         "owner_id": str(owner_id or "").strip(),
@@ -67,6 +67,7 @@ def _target(name, owner_id, mac="", ip="", broadcast="", agent_base_url="", agen
         "agent_base_url": str(agent_base_url or "").strip().rstrip("/"),
         "agent_token": str(agent_token or "").strip(),
         "camera_index": str(camera_index or "").strip(),
+        "explorer_root": str(explorer_root or "C:/").strip(),
         "allow_server_restart": bool(allow_server_restart),
     }
 
@@ -83,6 +84,7 @@ def load_target_configs():
             agent_base_url=PC_AGENT_BASE_URL,
             agent_token=PC_AGENT_TOKEN,
             camera_index=PC_CAMERA_INDEX,
+            explorer_root=_env("PC_EXPLORER_ROOT", "C:/"),
             allow_server_restart=True,
         ))
     if USER_A_TELEGRAM_ID:
@@ -95,6 +97,7 @@ def load_target_configs():
             agent_base_url=_env("USER_A_PC_AGENT_BASE_URL"),
             agent_token=_env("USER_A_PC_AGENT_TOKEN"),
             camera_index=_env("USER_A_PC_CAMERA_INDEX"),
+            explorer_root=_env("USER_A_PC_EXPLORER_ROOT", "C:/"),
             allow_server_restart=False,
         ))
 
@@ -114,6 +117,7 @@ def load_target_configs():
             agent_base_url=_env(f"{prefix}_AGENT_BASE_URL"),
             agent_token=_env(f"{prefix}_AGENT_TOKEN"),
             camera_index=_env(f"{prefix}_CAMERA_INDEX"),
+            explorer_root=_env(f"{prefix}_EXPLORER_ROOT", "C:/"),
             # Restart server is intentionally reserved for the admin target only.
             allow_server_restart=False,
         ))
@@ -576,9 +580,11 @@ def get_explorer_menu(items, current_path, page=0):
 
 
 def send_explorer_listing(target_path=None, page=0, chat_id=None, target=None):
-    payload = call_pc_agent_json("GET", "/explorer", params={"path": target_path} if target_path else None, target=target)
+    target = target or get_default_admin_target() or {}
+    requested_path = target_path if target_path else target.get("explorer_root", "C:/")
+    payload = call_pc_agent_json("GET", "/explorer", params={"path": requested_path} if requested_path else None, target=target)
     data = payload.get("data", {})
-    resolved_path = data.get("path", target_path or "drives:/")
+    resolved_path = data.get("path", requested_path or "drives:/")
     send_msg(
         format_explorer_text(data, target=target),
         get_explorer_menu(data.get("items", []), resolved_path, page=page),
