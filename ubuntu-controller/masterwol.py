@@ -114,7 +114,8 @@ def load_target_configs():
             agent_base_url=_env(f"{prefix}_AGENT_BASE_URL"),
             agent_token=_env(f"{prefix}_AGENT_TOKEN"),
             camera_index=_env(f"{prefix}_CAMERA_INDEX"),
-            allow_server_restart=_env(f"{prefix}_ALLOW_SERVER_RESTART").lower() == "true",
+            # Restart server is intentionally reserved for the admin target only.
+            allow_server_restart=False,
         ))
     return targets
 

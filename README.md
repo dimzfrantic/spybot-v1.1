@@ -134,14 +134,13 @@ TARGET_1_IP=172.16.71.99
 TARGET_1_AGENT_BASE_URL=http://172.16.71.99:8787
 TARGET_1_AGENT_TOKEN=token-agent-target-1
 TARGET_1_CAMERA_INDEX=
-TARGET_1_ALLOW_SERVER_RESTART=false
 ```
 
 User target mendapat menu untuk PC miliknya sendiri:
 - `/menu` menampilkan menu PC target miliknya
 - `/nyalakanpc` menyalakan PC target miliknya
 - Camera, Screenshot, Explorer, Restart, dan Shutdown diarahkan ke Windows Agent PC target miliknya
-- Restart server Ubuntu tetap tidak diberikan kecuali target tersebut secara eksplisit diberi izin
+- Restart server Ubuntu tetap khusus admin dan tidak diberikan kepada target user lain
 
 ### Grup Telegram
 

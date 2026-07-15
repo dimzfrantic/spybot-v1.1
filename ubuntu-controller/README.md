@@ -113,7 +113,6 @@ TARGET_1_IP=172.16.71.99
 TARGET_1_AGENT_BASE_URL=http://172.16.71.99:8787
 TARGET_1_AGENT_TOKEN=token-agent-target-1
 TARGET_1_CAMERA_INDEX=
-TARGET_1_ALLOW_SERVER_RESTART=false
 ```
 
 Keterangan penting:
@@ -137,7 +136,7 @@ Jika `USER_A_TELEGRAM_ID` atau `TARGET_N_OWNER_TELEGRAM_ID` cocok dengan pengiri
 - `/menu` menampilkan menu untuk PC milik user tersebut
 - `/nyalakanpc` mengirim magic packet ke MAC target user tersebut
 - Camera, Screenshot, Explorer, Restart, dan Shutdown diarahkan ke agent target user tersebut
-- Restart server Ubuntu tetap hanya untuk target yang diberi `allow_server_restart`
+- Restart server Ubuntu tetap khusus admin, tidak diberikan kepada target user lain
 
 ### User lain
 

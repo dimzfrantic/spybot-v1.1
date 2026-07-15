@@ -215,3 +215,54 @@ def test_agent_call_uses_selected_user_target_credentials(monkeypatch):
 
     assert requests_seen[0]["url"] == "http://pc-randy:8787/status"
     assert requests_seen[0]["headers"] == {"X-Agent-Token": "token-randy"}
+
+
+def test_non_admin_callback_cannot_restart_server(monkeypatch):
+    sent = []
+    restarted = []
+
+    monkeypatch.setattr(masterwol, "TARGET_CONFIGS", [target()])
+    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.append((text, reply_markup, chat_id)))
+    monkeypatch.setattr(masterwol, "restart_server_now", lambda: restarted.append(True))
+
+    handled = masterwol.handle_callback(
+        "menu|restart_server",
+        chat_id="987654321",
+        user_id="987654321",
+        chat_type="private",
+    )
+
+    assert handled is True
+    assert restarted == []
+    assert "tidak memiliki akses" in sent[-1][0].lower()
+
+
+def test_non_admin_confirm_cannot_restart_server(monkeypatch):
+    sent = []
+    restarted = []
+
+    monkeypatch.setattr(masterwol, "TARGET_CONFIGS", [target()])
+    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: sent.append((text, reply_markup, chat_id)))
+    monkeypatch.setattr(masterwol, "restart_server_now", lambda: restarted.append(True))
+
+    handled = masterwol.handle_callback(
+        "confirm|restart_server|yes",
+        chat_id="987654321",
+        user_id="987654321",
+        chat_type="private",
+    )
+
+    assert handled is True
+    assert restarted == []
+    assert "tidak memiliki akses" in sent[-1][0].lower()
+
+
+def test_indexed_targets_cannot_enable_server_restart_from_env(monkeypatch):
+    monkeypatch.setenv("TARGET_1_OWNER_TELEGRAM_ID", "222222222")
+    monkeypatch.setenv("TARGET_1_NAME", "PC Staff")
+    monkeypatch.setenv("TARGET_1_ALLOW_SERVER_RESTART", "true")
+
+    targets = masterwol.load_target_configs()
+    indexed_target = next(target for target in targets if target["owner_id"] == "222222222")
+
+    assert indexed_target["allow_server_restart"] is False
