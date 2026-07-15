@@ -93,7 +93,7 @@ PC_AGENT_TOKEN=ubah-dengan-token-aman-sendiri
 # Kosongkan agar controller memanggil /camera biasa.
 # Isi 1/2/dst jika klik Camera harus memakai /camera?index=N.
 PC_CAMERA_INDEX=1
-PC_EXPLORER_ROOT=C:/
+PC_EXPLORER_ROOT=
 
 # User A / PC Randy - akses penuh untuk PC miliknya sendiri
 USER_A_TELEGRAM_ID=987654321
@@ -104,8 +104,8 @@ USER_A_PC_IP=192.0.2.11
 USER_A_PC_AGENT_BASE_URL=http://192.0.2.11:8787
 USER_A_PC_AGENT_TOKEN=token-agent-user-a
 USER_A_PC_CAMERA_INDEX=
-USER_A_PC_EXPLORER_ROOT=C:/
-PC_EXPLORER_ROOT=C:/
+USER_A_PC_EXPLORER_ROOT=
+PC_EXPLORER_ROOT=
 
 # Format target tambahan untuk banyak user
 TARGET_1_OWNER_TELEGRAM_ID=222222222

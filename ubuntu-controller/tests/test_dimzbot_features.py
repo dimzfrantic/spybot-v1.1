@@ -122,6 +122,36 @@ def test_send_explorer_listing_calls_agent_once(monkeypatch):
     assert sent["reply_markup"] is not None
 
 
+def test_admin_explorer_root_can_request_drive_list_without_default_path(monkeypatch):
+    calls = []
+
+    def fake_call(method, path, params=None, target=None):
+        calls.append((method, path, params, target))
+        return {"data": {"path": "drives:/", "items": []}}
+
+    monkeypatch.setattr(masterwol, "call_pc_agent_json", fake_call)
+    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: None)
+
+    masterwol.send_explorer_listing(target={"name": "PC Utama", "explorer_root": ""})
+
+    assert calls[0][2] is None
+
+
+def test_user_explorer_root_can_default_to_c_drive(monkeypatch):
+    calls = []
+
+    def fake_call(method, path, params=None, target=None):
+        calls.append((method, path, params, target))
+        return {"data": {"path": "C:/", "items": []}}
+
+    monkeypatch.setattr(masterwol, "call_pc_agent_json", fake_call)
+    monkeypatch.setattr(masterwol, "send_msg", lambda text, reply_markup=None, chat_id=None: None)
+
+    masterwol.send_explorer_listing(target={"name": "PC Randy", "explorer_root": "C:/"})
+
+    assert calls[0][2] == {"path": "C:/"}
+
+
 def test_send_pc_camera_uses_configured_camera_index(monkeypatch):
     calls = []
 

@@ -57,7 +57,7 @@ def _env(name, default=""):
     return os.getenv(name, default).strip()
 
 
-def _target(name, owner_id, mac="", ip="", broadcast="", agent_base_url="", agent_token="", camera_index="", explorer_root="C:/", allow_server_restart=False):
+def _target(name, owner_id, mac="", ip="", broadcast="", agent_base_url="", agent_token="", camera_index="", explorer_root="", allow_server_restart=False):
     return {
         "name": name,
         "owner_id": str(owner_id or "").strip(),
@@ -67,7 +67,7 @@ def _target(name, owner_id, mac="", ip="", broadcast="", agent_base_url="", agen
         "agent_base_url": str(agent_base_url or "").strip().rstrip("/"),
         "agent_token": str(agent_token or "").strip(),
         "camera_index": str(camera_index or "").strip(),
-        "explorer_root": str(explorer_root or "C:/").strip(),
+        "explorer_root": str(explorer_root or "").strip(),
         "allow_server_restart": bool(allow_server_restart),
     }
 
@@ -84,7 +84,7 @@ def load_target_configs():
             agent_base_url=PC_AGENT_BASE_URL,
             agent_token=PC_AGENT_TOKEN,
             camera_index=PC_CAMERA_INDEX,
-            explorer_root=_env("PC_EXPLORER_ROOT", "C:/"),
+            explorer_root=_env("PC_EXPLORER_ROOT"),
             allow_server_restart=True,
         ))
     if USER_A_TELEGRAM_ID:
@@ -633,7 +633,7 @@ def handle_command(text, chat_id=None, user_id=None, chat_type=None):
             send_pc_screenshot(chat_id=target_chat_id, target=target)
         except Exception as exc:
             logger.exception("Failed to fetch screenshot for %s", target_name)
-            send_msg(f"⚠️ Gagal mengambil screenshot {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            send_msg(format_agent_error(exc, f"Gagal mengambil screenshot {target_name}"), chat_id=target_chat_id)
         return True
 
     if txt in ["/camera", "/camera_pcutama"]:
@@ -641,7 +641,7 @@ def handle_command(text, chat_id=None, user_id=None, chat_type=None):
             send_pc_camera(chat_id=target_chat_id, target=target)
         except Exception as exc:
             logger.exception("Failed to fetch camera for %s", target_name)
-            send_msg(f"⚠️ Gagal mengambil camera {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            send_msg(format_agent_error(exc, f"Gagal mengambil camera {target_name}"), chat_id=target_chat_id)
         return True
 
     if txt.startswith("/explorer") or txt.startswith("/explorer_pcutama"):
@@ -717,7 +717,7 @@ def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, 
             send_pc_screenshot(chat_id=target_chat_id, target=target)
         except Exception as exc:
             logger.exception("Failed to fetch screenshot from agent for %s", target_name)
-            send_msg(f"⚠️ Gagal mengambil screenshot {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            send_msg(format_agent_error(exc, f"Gagal mengambil screenshot {target_name}"), chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|camera_pcutama":
@@ -726,7 +726,7 @@ def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, 
             send_pc_camera(chat_id=target_chat_id, target=target)
         except Exception as exc:
             logger.exception("Failed to fetch camera image from agent for %s", target_name)
-            send_msg(f"⚠️ Gagal mengambil camera {target_name} (`{type(exc).__name__}`).", chat_id=target_chat_id)
+            send_msg(format_agent_error(exc, f"Gagal mengambil camera {target_name}"), chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|explorer_root":
@@ -769,12 +769,12 @@ def handle_callback(callback_data, message_id=None, chat_id=None, user_id=None, 
         return True
 
     if callback_data == "menu|restart_pcutama":
-        confirmation = get_confirmation_menu("restart_pcutama", f"Apakah Bapak yakin ingin merestart {target_name}?")
+        confirmation = get_confirmation_menu("restart_pcutama", f"Apakah yakin ingin merestart {target_name}?")
         send_msg(confirmation["text"], {"inline_keyboard": confirmation["inline_keyboard"]}, chat_id=target_chat_id)
         return True
 
     if callback_data == "menu|shutdown_pcutama":
-        confirmation = get_confirmation_menu("shutdown_pcutama", f"Apakah Bapak yakin ingin mematikan {target_name}?")
+        confirmation = get_confirmation_menu("shutdown_pcutama", f"Apakah yakin ingin mematikan {target_name}?")
         send_msg(confirmation["text"], {"inline_keyboard": confirmation["inline_keyboard"]}, chat_id=target_chat_id)
         return True
 
